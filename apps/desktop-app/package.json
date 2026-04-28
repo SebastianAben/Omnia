@@ -1,0 +1,11 @@
+{
+  "name": "@omnia/desktop-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo desktop-app not bootstrapped yet",
+    "build": "echo desktop-app not bootstrapped yet",
+    "lint": "echo desktop-app lint not bootstrapped yet",
+    "typecheck": "echo desktop-app typecheck not bootstrapped yet"
+  }
+}

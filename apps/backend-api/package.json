@@ -1,0 +1,11 @@
+{
+  "name": "@omnia/backend-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo backend-api not bootstrapped yet",
+    "build": "echo backend-api not bootstrapped yet",
+    "lint": "echo backend-api lint not bootstrapped yet",
+    "typecheck": "echo backend-api typecheck not bootstrapped yet"
+  }
+}

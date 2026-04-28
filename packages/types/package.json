@@ -1,0 +1,13 @@
+{
+  "name": "@omnia/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "echo types package lint not bootstrapped yet",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

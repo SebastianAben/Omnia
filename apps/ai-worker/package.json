@@ -1,0 +1,11 @@
+{
+  "name": "@omnia/ai-worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo ai-worker not bootstrapped yet",
+    "build": "echo ai-worker not bootstrapped yet",
+    "lint": "echo ai-worker lint not bootstrapped yet",
+    "typecheck": "echo ai-worker typecheck not bootstrapped yet"
+  }
+}
