@@ -6,6 +6,12 @@ import path from "node:path";
 const isDev = process.env.NODE_ENV !== "production";
 const devServerUrl = process.env.OMNIA_DESKTOP_URL ?? "http://localhost:3000";
 const checkoutEventType = "transaction.bundle";
+const supportedReplayEventTypes = [
+  "transaction.bundle",
+  "shift.opened",
+  "shift.closed",
+  "stock_movement.created",
+] as const;
 
 type SyncStatus = "pending" | "queued" | "synced" | "failed" | "conflict";
 
@@ -43,8 +49,25 @@ type ShiftEventInput = {
   register: { id: string };
   user: { id: string };
   action: "open" | "close";
+  shiftId?: string | null;
   openingCashAmount?: number;
   closingCashAmount?: number;
+};
+
+type StockAdjustmentInput = {
+  branch: { id: string };
+  user: { id: string };
+  product: {
+    id: string;
+    sku: string;
+    name: string;
+    stockOnHand: number;
+    minimumQuantity: number;
+  };
+  movementType: "adjustment_plus" | "adjustment_minus";
+  quantity: number;
+  reasonCode: string;
+  notes?: string | null;
 };
 
 type LocalSyncQueueRow = {
@@ -79,8 +102,10 @@ const sqlValue = (value: string | number | null | undefined) => {
 };
 
 const getDesktopRoot = () => path.join(__dirname, "..");
-const getLocalDbPath = () => path.join(getDesktopRoot(), ".omnia", "omnia-local.db");
-const getLocalSchemaPath = () => path.join(getDesktopRoot(), "local-store", "schema.sql");
+const getLocalDbPath = () =>
+  path.join(getDesktopRoot(), ".omnia", "omnia-local.db");
+const getLocalSchemaPath = () =>
+  path.join(getDesktopRoot(), "local-store", "schema.sql");
 
 function runSql(sql: string) {
   ensureLocalStore();
@@ -240,7 +265,9 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
       input.paymentStatus,
       "pending",
       createdAt,
-    ].map(sqlValue).join(", ")});`,
+    ]
+      .map(sqlValue)
+      .join(", ")});`,
     ...input.lines.map(
       (line, index) =>
         `INSERT INTO sales_transaction_items_local (id, transaction_id, product_id, sku, name, quantity, unit_price, discount_total, subtotal) VALUES (${[
@@ -253,7 +280,9 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
           line.product.price,
           line.discountTotal,
           line.product.price * line.quantity - line.discountTotal,
-        ].map(sqlValue).join(", ")});`,
+        ]
+          .map(sqlValue)
+          .join(", ")});`,
     ),
     `INSERT INTO payments_local (id, transaction_id, method, amount, status, recorded_at, sync_status) VALUES (${[
       paymentId,
@@ -263,7 +292,9 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
       input.paymentStatus,
       createdAt,
       "pending",
-    ].map(sqlValue).join(", ")});`,
+    ]
+      .map(sqlValue)
+      .join(", ")});`,
     ...input.lines.flatMap((line, index) => {
       const before = line.product.stockOnHand;
       const after = Math.max(before - line.quantity, 0);
@@ -277,7 +308,11 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
           after,
           0,
           createdAt,
-        ].map(sqlValue).join(", ")}) ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = MAX(inventory_balances_local.quantity - ${sqlValue(line.quantity)}, 0), updated_at = excluded.updated_at;`,
+        ]
+          .map(sqlValue)
+          .join(
+            ", ",
+          )}) ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = MAX(inventory_balances_local.quantity - ${sqlValue(line.quantity)}, 0), updated_at = excluded.updated_at;`,
         `INSERT INTO stock_movements_local (id, branch_id, product_id, source_type, source_id, movement_type, quantity_delta, quantity_before, quantity_after, reason_code, performed_by_user_id, occurred_at, sync_status) VALUES (${[
           payload.stock_movements[index].id,
           input.branch.id,
@@ -292,7 +327,9 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
           input.user.id,
           createdAt,
           "pending",
-        ].map(sqlValue).join(", ")});`,
+        ]
+          .map(sqlValue)
+          .join(", ")});`,
       ];
     }),
     `INSERT INTO sync_queue_local (id, event_id, event_type, event_version, branch_id, source_system, source_mode, entity_type, entity_id, payload_json, status, attempt_count, created_at) VALUES (${[
@@ -309,7 +346,9 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
       "pending",
       0,
       createdAt,
-    ].map(sqlValue).join(", ")});`,
+    ]
+      .map(sqlValue)
+      .join(", ")});`,
     "COMMIT;",
   ];
 
@@ -413,12 +452,78 @@ function listLocalSyncQueue() {
   }));
 }
 
-async function replayPendingSync(input: { apiBaseUrl: string; token?: string }) {
+function listLocalInventoryBalances() {
+  return querySql<{
+    id: string;
+    branch_id: string;
+    product_id: string;
+    quantity: number;
+    minimum_quantity: number;
+    updated_at: string;
+  }>(
+    `SELECT * FROM inventory_balances_local ORDER BY updated_at DESC LIMIT 500;`,
+  ).map((row) => ({
+    id: row.id,
+    branchId: row.branch_id,
+    productId: row.product_id,
+    quantity: Number(row.quantity),
+    minimumQuantity: Number(row.minimum_quantity),
+    updatedAt: row.updated_at,
+  }));
+}
+
+function listLocalStockMovements() {
+  return querySql<{
+    id: string;
+    branch_id: string;
+    product_id: string;
+    source_type: string;
+    source_id?: string | null;
+    movement_type: string;
+    quantity_delta: number;
+    quantity_before?: number | null;
+    quantity_after?: number | null;
+    reason_code: string;
+    notes?: string | null;
+    performed_by_user_id?: string | null;
+    occurred_at: string;
+    sync_status: SyncStatus;
+  }>(
+    `SELECT * FROM stock_movements_local ORDER BY occurred_at DESC LIMIT 100;`,
+  ).map((row) => ({
+    id: row.id,
+    branchId: row.branch_id,
+    productId: row.product_id,
+    sourceType: row.source_type,
+    sourceId: row.source_id ?? undefined,
+    movementType: row.movement_type,
+    quantityDelta: Number(row.quantity_delta),
+    quantityBefore:
+      row.quantity_before === null || row.quantity_before === undefined
+        ? undefined
+        : Number(row.quantity_before),
+    quantityAfter:
+      row.quantity_after === null || row.quantity_after === undefined
+        ? undefined
+        : Number(row.quantity_after),
+    reasonCode: row.reason_code,
+    notes: row.notes ?? undefined,
+    performedByUserId: row.performed_by_user_id ?? undefined,
+    occurredAt: row.occurred_at,
+    syncStatus: row.sync_status,
+  }));
+}
+
+async function replayPendingSync(input: {
+  apiBaseUrl: string;
+  token?: string;
+}) {
   const pending = querySql<LocalSyncQueueRow>(
-    `SELECT * FROM sync_queue_local WHERE event_type = 'transaction.bundle' AND status IN ('pending', 'failed') ORDER BY created_at ASC LIMIT 10;`,
+    `SELECT * FROM sync_queue_local WHERE event_type IN (${supportedReplayEventTypes.map(sqlValue).join(", ")}) AND status IN ('pending', 'failed') ORDER BY created_at ASC LIMIT 10;`,
   );
   let synced = 0;
   let failed = 0;
+  let conflict = 0;
 
   for (const item of pending) {
     const attemptedAt = new Date().toISOString();
@@ -427,7 +532,7 @@ async function replayPendingSync(input: { apiBaseUrl: string; token?: string }) 
     );
 
     try {
-      const response = await fetch(`${input.apiBaseUrl}/sync/bundles`, {
+      const response = await fetch(getReplayEndpoint(input.apiBaseUrl, item), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -449,14 +554,9 @@ async function replayPendingSync(input: { apiBaseUrl: string; token?: string }) 
 
       const nextStatus =
         body.data?.result_status === "conflict" ? "conflict" : "synced";
-      runSql(
-        `UPDATE sync_queue_local SET status = ${sqlValue(nextStatus)}, acknowledged_at = ${sqlValue(new Date().toISOString())}, ack_status = ${sqlValue(body.data?.result_status ?? "synced")}, last_error_code = NULL, last_error_message = NULL WHERE id = ${sqlValue(item.id)};
-         UPDATE sales_transactions_local SET sync_status = ${sqlValue(nextStatus)} WHERE id = ${sqlValue(item.entity_id)};
-         UPDATE payments_local SET sync_status = ${sqlValue(nextStatus)} WHERE transaction_id = ${sqlValue(item.entity_id)};
-         UPDATE stock_movements_local SET sync_status = ${sqlValue(nextStatus)} WHERE source_id = ${sqlValue(item.entity_id)};`,
-      );
+      markReplayAcknowledged(item, nextStatus, body.data?.result_status);
       synced += nextStatus === "synced" ? 1 : 0;
-      failed += nextStatus === "conflict" ? 1 : 0;
+      conflict += nextStatus === "conflict" ? 1 : 0;
     } catch (error) {
       failed += 1;
       runSql(
@@ -465,14 +565,17 @@ async function replayPendingSync(input: { apiBaseUrl: string; token?: string }) 
     }
   }
 
-  return { attempted: pending.length, synced, failed };
+  return { attempted: pending.length, synced, failed, conflict };
 }
 
 function saveShiftEvent(input: ShiftEventInput) {
   const occurredAt = new Date().toISOString();
-  const shiftId = createId("shift");
+  const shiftId = input.action === "open" ? createId("shift") : input.shiftId;
+  if (!shiftId) {
+    throw new Error("Active shift is required before closing a shift.");
+  }
   const eventId = createId("evt");
-  const eventType = `shift.${input.action}`;
+  const eventType = input.action === "open" ? "shift.opened" : "shift.closed";
   const payload = {
     shift: {
       id: shiftId,
@@ -500,8 +603,10 @@ function saveShiftEvent(input: ShiftEventInput) {
             input.openingCashAmount ?? 0,
             "open",
             "pending",
-          ].map(sqlValue).join(", ")});`
-        : `UPDATE shifts_local SET closed_by_user_id = ${sqlValue(input.user.id)}, closed_at = ${sqlValue(occurredAt)}, closing_cash_amount = ${sqlValue(input.closingCashAmount ?? 0)}, status = 'closed', sync_status = 'pending' WHERE branch_id = ${sqlValue(input.branch.id)} AND register_id = ${sqlValue(input.register.id)} AND status = 'open';`,
+          ]
+            .map(sqlValue)
+            .join(", ")});`
+        : `UPDATE shifts_local SET closed_by_user_id = ${sqlValue(input.user.id)}, closed_at = ${sqlValue(occurredAt)}, closing_cash_amount = ${sqlValue(input.closingCashAmount ?? 0)}, status = 'closed', sync_status = 'pending' WHERE id = ${sqlValue(shiftId)};`,
       `INSERT INTO sync_queue_local (id, event_id, event_type, event_version, branch_id, source_system, source_mode, entity_type, entity_id, payload_json, status, attempt_count, created_at) VALUES (${[
         createId("sync"),
         eventId,
@@ -515,10 +620,12 @@ function saveShiftEvent(input: ShiftEventInput) {
         JSON.stringify({
           event_id: eventId,
           event_type: eventType,
-          event_version: 1,
+          event_version: "1",
           branch_id: input.branch.id,
           source_system: "branch_app",
           source_mode: "online",
+          entity_type: "shift",
+          entity_id: shiftId,
           occurred_at: occurredAt,
           produced_by_user_id: input.user.id,
           payload,
@@ -526,12 +633,155 @@ function saveShiftEvent(input: ShiftEventInput) {
         "pending",
         0,
         occurredAt,
-      ].map(sqlValue).join(", ")});`,
+      ]
+        .map(sqlValue)
+        .join(", ")});`,
       "COMMIT;",
     ].join("\n"),
   );
 
   return { shiftId, eventId };
+}
+
+function saveStockAdjustment(input: StockAdjustmentInput) {
+  const occurredAt = new Date().toISOString();
+  const movementId = createId("mov");
+  const eventId = createId("evt");
+  const quantityDelta =
+    input.movementType === "adjustment_plus"
+      ? Math.abs(input.quantity)
+      : -Math.abs(input.quantity);
+  const before = input.product.stockOnHand;
+  const after = Math.max(before + quantityDelta, 0);
+  const inventoryId = `inv_${input.branch.id}_${input.product.id}`;
+  const payload = {
+    stock_movement: {
+      id: movementId,
+      branch_id: input.branch.id,
+      product_id: input.product.id,
+      source_type: "stock_adjustment",
+      source_id: movementId,
+      movement_type: input.movementType,
+      quantity_delta: quantityDelta,
+      quantity_before: before,
+      quantity_after: after,
+      reason_code: input.reasonCode,
+      notes: input.notes ?? null,
+      performed_by_user_id: input.user.id,
+      movement_at: occurredAt,
+    },
+  };
+
+  runSql(
+    [
+      "BEGIN IMMEDIATE;",
+      `INSERT INTO inventory_balances_local (id, branch_id, product_id, quantity, minimum_quantity, updated_at) VALUES (${[
+        inventoryId,
+        input.branch.id,
+        input.product.id,
+        after,
+        input.product.minimumQuantity,
+        occurredAt,
+      ]
+        .map(sqlValue)
+        .join(
+          ", ",
+        )}) ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = ${sqlValue(after)}, minimum_quantity = excluded.minimum_quantity, updated_at = excluded.updated_at;`,
+      `INSERT INTO stock_movements_local (id, branch_id, product_id, source_type, source_id, movement_type, quantity_delta, quantity_before, quantity_after, reason_code, notes, performed_by_user_id, occurred_at, sync_status) VALUES (${[
+        movementId,
+        input.branch.id,
+        input.product.id,
+        "stock_adjustment",
+        movementId,
+        input.movementType,
+        quantityDelta,
+        before,
+        after,
+        input.reasonCode,
+        input.notes ?? null,
+        input.user.id,
+        occurredAt,
+        "pending",
+      ]
+        .map(sqlValue)
+        .join(", ")});`,
+      `INSERT INTO sync_queue_local (id, event_id, event_type, event_version, branch_id, source_system, source_mode, entity_type, entity_id, payload_json, status, attempt_count, created_at) VALUES (${[
+        createId("sync"),
+        eventId,
+        "stock_movement.created",
+        1,
+        input.branch.id,
+        "branch_app",
+        "online",
+        "stock_movement",
+        movementId,
+        JSON.stringify({
+          event_id: eventId,
+          event_type: "stock_movement.created",
+          event_version: "1",
+          branch_id: input.branch.id,
+          source_system: "branch_app",
+          source_mode: "online",
+          entity_type: "stock_movement",
+          entity_id: movementId,
+          occurred_at: occurredAt,
+          produced_by_user_id: input.user.id,
+          payload,
+        }),
+        "pending",
+        0,
+        occurredAt,
+      ]
+        .map(sqlValue)
+        .join(", ")});`,
+      "COMMIT;",
+    ].join("\n"),
+  );
+
+  return {
+    movementId,
+    eventId,
+    quantityBefore: before,
+    quantityAfter: after,
+  };
+}
+
+function getReplayEndpoint(apiBaseUrl: string, item: LocalSyncQueueRow) {
+  return item.event_type === checkoutEventType
+    ? `${apiBaseUrl}/sync/bundles`
+    : `${apiBaseUrl}/sync/events`;
+}
+
+function markReplayAcknowledged(
+  item: LocalSyncQueueRow,
+  nextStatus: SyncStatus,
+  acknowledgementStatus?: string,
+) {
+  const acknowledgedAt = new Date().toISOString();
+  const sharedUpdates = `UPDATE sync_queue_local SET status = ${sqlValue(nextStatus)}, acknowledged_at = ${sqlValue(acknowledgedAt)}, ack_status = ${sqlValue(acknowledgementStatus ?? "synced")}, last_error_code = NULL, last_error_message = NULL WHERE id = ${sqlValue(item.id)};`;
+
+  if (item.event_type === checkoutEventType) {
+    runSql(
+      `${sharedUpdates}
+       UPDATE sales_transactions_local SET sync_status = ${sqlValue(nextStatus)} WHERE id = ${sqlValue(item.entity_id)};
+       UPDATE payments_local SET sync_status = ${sqlValue(nextStatus)} WHERE transaction_id = ${sqlValue(item.entity_id)};
+       UPDATE stock_movements_local SET sync_status = ${sqlValue(nextStatus)} WHERE source_id = ${sqlValue(item.entity_id)};`,
+    );
+    return;
+  }
+
+  if (item.event_type === "stock_movement.created") {
+    runSql(
+      `${sharedUpdates}
+       UPDATE stock_movements_local SET sync_status = ${sqlValue(nextStatus)} WHERE id = ${sqlValue(item.entity_id)};`,
+    );
+    return;
+  }
+
+  runSql(
+    `${sharedUpdates}
+     UPDATE shifts_local SET sync_status = ${sqlValue(nextStatus)} WHERE id = ${sqlValue(item.entity_id)};`,
+  );
 }
 
 function registerLocalStoreHandlers() {
@@ -543,6 +793,15 @@ function registerLocalStoreHandlers() {
   );
   ipcMain.handle("omnia:local-store:list-sync-queue", () =>
     listLocalSyncQueue(),
+  );
+  ipcMain.handle("omnia:local-store:list-inventory-balances", () =>
+    listLocalInventoryBalances(),
+  );
+  ipcMain.handle("omnia:local-store:list-stock-movements", () =>
+    listLocalStockMovements(),
+  );
+  ipcMain.handle("omnia:local-store:save-stock-adjustment", (_event, input) =>
+    saveStockAdjustment(input as StockAdjustmentInput),
   );
   ipcMain.handle("omnia:local-store:replay-sync", (_event, input) =>
     replayPendingSync(input as { apiBaseUrl: string; token?: string }),

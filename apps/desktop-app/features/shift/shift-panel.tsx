@@ -13,6 +13,7 @@ import {
 export function ShiftPanel() {
   const shiftStatus = useAppState((state) => state.shiftStatus);
   const setShiftStatus = useAppState((state) => state.setShiftStatus);
+  const activeShiftId = useAppState((state) => state.activeShiftId);
   const setActiveShiftId = useAppState((state) => state.setActiveShiftId);
   const branch = useAppState((state) => state.branch);
   const register = useAppState((state) => state.register);
@@ -47,11 +48,16 @@ export function ShiftPanel() {
   };
 
   const handleCloseShift = async () => {
+    if (!activeShiftId) {
+      return;
+    }
+
     await saveShiftEvent({
       branch,
       register,
       user,
       action: "close",
+      shiftId: activeShiftId,
       closingCashAmount,
     });
     setActiveShiftId(undefined);
@@ -115,7 +121,7 @@ export function ShiftPanel() {
               Open Shift
             </Button>
             <Button
-              disabled={shiftStatus === "closed"}
+              disabled={shiftStatus === "closed" || !activeShiftId}
               onClick={handleCloseShift}
               type="button"
               variant="secondary"
@@ -143,6 +149,12 @@ export function ShiftPanel() {
             <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Some transactions are still pending sync. You can close the shift,
               but review sync status before handoff.
+            </div>
+          ) : null}
+          {shiftStatus === "open" && !activeShiftId ? (
+            <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              No active shift ID is recorded. Open a new shift before checkout
+              or close operations.
             </div>
           ) : null}
         </aside>

@@ -14,10 +14,28 @@ export function getLocalSyncSummary(
   const transactionQueue = queue.filter(
     (record) => record.eventType === "transaction.bundle",
   );
-  const pending = transactionQueue.filter((record) =>
+  const shiftQueue = queue.filter((record) =>
+    ["shift.opened", "shift.closed"].includes(record.eventType),
+  );
+  const stockMovementQueue = queue.filter(
+    (record) => record.eventType === "stock_movement.created",
+  );
+  const transactionPending = transactionQueue.filter((record) =>
     ["pending", "queued"].includes(record.status),
   ).length;
-  const failed = transactionQueue.filter((record) =>
+  const transactionFailed = transactionQueue.filter((record) =>
+    ["failed", "conflict"].includes(record.status),
+  ).length;
+  const shiftPending = shiftQueue.filter((record) =>
+    ["pending", "queued"].includes(record.status),
+  ).length;
+  const shiftFailed = shiftQueue.filter((record) =>
+    ["failed", "conflict"].includes(record.status),
+  ).length;
+  const stockMovementPending = stockMovementQueue.filter((record) =>
+    ["pending", "queued"].includes(record.status),
+  ).length;
+  const stockMovementFailed = stockMovementQueue.filter((record) =>
     ["failed", "conflict"].includes(record.status),
   ).length;
 
@@ -25,24 +43,34 @@ export function getLocalSyncSummary(
     {
       label: "Transactions",
       description: "Local checkout bundles waiting for central sync",
-      pending,
-      failed,
-      status: failed > 0 ? "danger" : pending > 0 ? "warning" : "success",
+      pending: transactionPending,
+      failed: transactionFailed,
+      status:
+        transactionFailed > 0
+          ? "danger"
+          : transactionPending > 0
+            ? "warning"
+            : "success",
     },
     {
-      label: "Inventory movements",
-      description: "Stock movement rows included in checkout bundles",
-      pending,
-      failed,
-      status: failed > 0 ? "danger" : pending > 0 ? "warning" : "success",
+      label: "Shifts",
+      description: "Open and close shift events waiting for central sync",
+      pending: shiftPending,
+      failed: shiftFailed,
+      status:
+        shiftFailed > 0 ? "danger" : shiftPending > 0 ? "warning" : "success",
     },
     {
-      label: "Master data cache",
-      description:
-        "Product and branch price reads use API first, demo cache second",
-      pending: 0,
-      failed: 0,
-      status: "success",
+      label: "Stock movements",
+      description: "Manual stock adjustments waiting for central sync",
+      pending: stockMovementPending,
+      failed: stockMovementFailed,
+      status:
+        stockMovementFailed > 0
+          ? "danger"
+          : stockMovementPending > 0
+            ? "warning"
+            : "success",
     },
   ];
 }

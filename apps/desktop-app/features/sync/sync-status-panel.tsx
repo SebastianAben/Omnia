@@ -54,7 +54,7 @@ export function SyncStatusPanel() {
     try {
       const result = await replayPendingSync(token);
       setReplayMessage(
-        `${result.attempted} attempted, ${result.synced} synced, ${result.failed} failed.`,
+        `${result.attempted} attempted, ${result.synced} synced, ${result.failed} failed, ${result.conflict} conflict.`,
       );
       await refreshQueue();
     } catch (error) {
@@ -69,12 +69,12 @@ export function SyncStatusPanel() {
   return (
     <WorkspacePanel
       badge="Local queue"
-      description="Branch-side sync monitor for pending checkout bundles and local-first replay readiness."
+      description="Branch-side sync monitor for pending checkout, shift, and inventory events."
       title="Sync Status"
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-slate-600">
-          Replay pending and failed checkout bundles to the central backend.
+          Replay pending and failed local events to the central backend.
         </div>
         <button
           className="h-9 rounded-md bg-slate-950 px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"

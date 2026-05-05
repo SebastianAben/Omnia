@@ -7,6 +7,7 @@ import { CategoriesModule } from "./categories/categories.module";
 import { validateEnvironment } from "./config/env.validation";
 import { appConfig } from "./config/app.config";
 import { HealthModule } from "./health/health.module";
+import { InventoryModule } from "./inventory/inventory.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductsModule } from "./products/products.module";
 import { QueueModule } from "./queue/queue.module";
@@ -32,6 +33,7 @@ import { UsersModule } from "./users/users.module";
     RegistersModule,
     CategoriesModule,
     ProductsModule,
+    InventoryModule,
     SyncModule,
   ],
 })

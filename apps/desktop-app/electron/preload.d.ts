@@ -48,6 +48,32 @@ type OmniaLocalSyncQueueRecord = {
   lastErrorMessage?: string;
 };
 
+type OmniaLocalInventoryBalanceRecord = {
+  id: string;
+  branchId: string;
+  productId: string;
+  quantity: number;
+  minimumQuantity: number;
+  updatedAt: string;
+};
+
+type OmniaLocalStockMovementRecord = {
+  id: string;
+  branchId: string;
+  productId: string;
+  sourceType: string;
+  sourceId?: string;
+  movementType: string;
+  quantityDelta: number;
+  quantityBefore?: number;
+  quantityAfter?: number;
+  reasonCode: string;
+  notes?: string;
+  performedByUserId?: string;
+  occurredAt: string;
+  syncStatus: "pending" | "queued" | "synced" | "failed" | "conflict";
+};
+
 declare global {
   interface Window {
     omniaDesktop?: {
@@ -66,10 +92,22 @@ declare global {
         }>;
         listTransactions: () => Promise<OmniaLocalTransaction[]>;
         listSyncQueue: () => Promise<OmniaLocalSyncQueueRecord[]>;
-        replaySync: (input: {
-          apiBaseUrl: string;
-          token?: string;
-        }) => Promise<{ attempted: number; synced: number; failed: number }>;
+        listInventoryBalances: () => Promise<
+          OmniaLocalInventoryBalanceRecord[]
+        >;
+        listStockMovements: () => Promise<OmniaLocalStockMovementRecord[]>;
+        saveStockAdjustment: (input: unknown) => Promise<{
+          movementId: string;
+          eventId: string;
+          quantityBefore: number;
+          quantityAfter: number;
+        }>;
+        replaySync: (input: { apiBaseUrl: string; token?: string }) => Promise<{
+          attempted: number;
+          synced: number;
+          failed: number;
+          conflict: number;
+        }>;
         saveShiftEvent: (input: unknown) => Promise<{
           shiftId: string;
           eventId: string;

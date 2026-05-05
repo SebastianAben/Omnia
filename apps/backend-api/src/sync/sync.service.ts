@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import {
   PaymentStatus,
   Prisma,
+  ShiftStatus,
   SourceMode,
   StockMovementType,
   SyncJobStatus,
@@ -103,6 +104,74 @@ const syncBundleSchema = z.object({
 
 type ParsedSyncBundle = z.infer<typeof syncBundleSchema>;
 
+const shiftEventSchema = z.object({
+  event_id: z.string().min(1),
+  event_type: z.enum(["shift.opened", "shift.closed"]),
+  event_version: z.coerce.number().int().positive(),
+  branch_id: z.string().min(1),
+  source_system: z.string().min(1),
+  source_mode: z.enum(["online", "offline_replay"]),
+  entity_type: z.literal("shift"),
+  entity_id: z.string().min(1),
+  occurred_at: z.string().datetime(),
+  produced_by_user_id: z.string().min(1).optional(),
+  payload: z.object({
+    shift: z.object({
+      id: z.string().min(1),
+      branch_id: z.string().min(1),
+      register_id: z.string().min(1),
+      action: z.enum(["open", "close"]).optional(),
+      opened_by_user_id: z.string().min(1).optional(),
+      closed_by_user_id: z.string().min(1).optional(),
+      opened_at: z.string().datetime().optional(),
+      closed_at: z.string().datetime().optional(),
+      occurred_at: z.string().datetime().optional(),
+      opening_cash_amount: moneySchema.optional(),
+      closing_cash_amount: moneySchema.nullable().optional(),
+    }),
+  }),
+});
+
+type ParsedShiftEvent = z.infer<typeof shiftEventSchema>;
+
+const stockMovementCreatedEventSchema = z.object({
+  event_id: z.string().min(1),
+  event_type: z.literal("stock_movement.created"),
+  event_version: z.coerce.number().int().positive(),
+  branch_id: z.string().min(1),
+  source_system: z.string().min(1),
+  source_mode: z.enum(["online", "offline_replay"]),
+  entity_type: z.literal("stock_movement"),
+  entity_id: z.string().min(1),
+  occurred_at: z.string().datetime(),
+  produced_by_user_id: z.string().min(1).optional(),
+  payload: z.object({
+    stock_movement: z.object({
+      id: z.string().min(1),
+      branch_id: z.string().min(1),
+      product_id: z.string().min(1),
+      source_type: z.string().min(1),
+      source_id: z.string().min(1).nullable().optional(),
+      movement_type: z.enum([
+        "sale_out",
+        "stock_in",
+        "adjustment_plus",
+        "adjustment_minus",
+        "sync_correction",
+      ]),
+      quantity_delta: quantitySchema,
+      reason_code: z.string().min(1),
+      notes: z.string().nullable().optional(),
+      performed_by_user_id: z.string().min(1).nullable().optional(),
+      movement_at: z.string().datetime(),
+    }),
+  }),
+});
+
+type ParsedStockMovementCreatedEvent = z.infer<
+  typeof stockMovementCreatedEventSchema
+>;
+
 @Injectable()
 export class SyncService {
   constructor(
@@ -111,6 +180,16 @@ export class SyncService {
   ) {}
 
   async receiveEvent(dto: SyncEventDto, idempotencyKey?: string) {
+    if (
+      dto.event_type === "shift.opened" ||
+      dto.event_type === "shift.closed"
+    ) {
+      return this.receiveShiftEvent(dto, idempotencyKey);
+    }
+    if (dto.event_type === "stock_movement.created") {
+      return this.receiveStockMovementCreatedEvent(dto, idempotencyKey);
+    }
+
     const idempotencyKeyValue = idempotencyKey ?? dto.event_id;
     const queueJobId = await this.queueService.enqueueSyncEvent(
       idempotencyKeyValue,
@@ -129,6 +208,61 @@ export class SyncService {
         queue_job_id: queueJobId,
       },
     };
+  }
+
+  private async receiveShiftEvent(dto: SyncEventDto, idempotencyKey?: string) {
+    const parsed = shiftEventSchema.safeParse(dto);
+
+    if (!parsed.success) {
+      throw new BadRequestException({
+        success: false,
+        message: "validation failed",
+        error: {
+          code: "VALIDATION_ERROR",
+          details: parsed.error.issues,
+        },
+      });
+    }
+
+    const event = parsed.data;
+    const idempotencyKeyValue = idempotencyKey ?? event.event_id;
+    const duplicate = await this.prisma.syncLog.findFirst({
+      where: {
+        OR: [
+          { eventId: event.event_id },
+          { idempotencyKey: idempotencyKeyValue },
+        ],
+      },
+      select: {
+        entityId: true,
+        loggedAt: true,
+        status: true,
+        syncJobId: true,
+      },
+    });
+
+    if (duplicate) {
+      return ok({
+        event_id: event.event_id,
+        entity_id: duplicate.entityId,
+        result_status: "duplicate_ignored",
+        processed_at: duplicate.loggedAt,
+        sync_job_id: duplicate.syncJobId,
+        queue_job_id: null,
+      });
+    }
+
+    const result = await this.applyShiftEvent(event, idempotencyKeyValue);
+    const queueJobId = await this.enqueueShiftJobSafely(event, result);
+
+    return ok({
+      event_id: event.event_id,
+      entity_id: event.payload.shift.id,
+      result_status: result.resultStatus,
+      processed_at: result.processedAt,
+      sync_job_id: result.syncJobId,
+      queue_job_id: queueJobId,
+    });
   }
 
   async receiveBundle(input: unknown, idempotencyKey?: string) {
@@ -263,6 +397,520 @@ export class SyncService {
         logged_at: log.loggedAt,
       })),
     );
+  }
+
+  private async applyShiftEvent(
+    event: ParsedShiftEvent,
+    idempotencyKey: string,
+  ) {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.validateShiftReferences(tx, event);
+
+        const job = await tx.syncJob.create({
+          data: {
+            branchId: event.branch_id,
+            triggeredByUserId: event.produced_by_user_id,
+            jobType: toShiftJobType(event.event_type),
+            entityType: "shift",
+            entityId: event.payload.shift.id,
+            payloadReference: event.event_id,
+            status: SyncJobStatus.PROCESSING,
+            attemptCount: 1,
+            lastAttemptAt: new Date(),
+          },
+        });
+
+        const resultStatus =
+          event.event_type === "shift.opened"
+            ? await this.applyShiftOpened(tx, event)
+            : await this.applyShiftClosed(tx, event);
+
+        await tx.syncLog.create({
+          data: {
+            syncJobId: job.id,
+            eventId: event.event_id,
+            eventType: event.event_type,
+            eventVersion: String(event.event_version),
+            branchId: event.branch_id,
+            entityType: "shift",
+            entityId: event.payload.shift.id,
+            status: SyncLogStatus.APPLIED,
+            logLevel: "info",
+            message: toShiftSyncLogMessage(event.event_type, resultStatus),
+            idempotencyKey,
+            payload: event as unknown as Prisma.InputJsonValue,
+            producedById: event.produced_by_user_id,
+            occurredAt: new Date(event.occurred_at),
+          },
+        });
+
+        await tx.syncJob.update({
+          where: { id: job.id },
+          data: { status: SyncJobStatus.SUCCESS },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId: event.produced_by_user_id,
+            branchId: event.branch_id,
+            entityType: "shift",
+            entityId: event.payload.shift.id,
+            action: toShiftAuditAction(event.event_type),
+            note: `Applied sync event ${event.event_id}`,
+          },
+        });
+
+        return {
+          syncJobId: job.id,
+          resultStatus,
+          processedAt: new Date(),
+        };
+      });
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException({
+        success: false,
+        message: "sync failed",
+        error: {
+          code: "SYNC_FAILED",
+          details: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async validateShiftReferences(
+    tx: Prisma.TransactionClient,
+    event: ParsedShiftEvent,
+  ) {
+    const shift = event.payload.shift;
+
+    if (event.branch_id !== shift.branch_id) {
+      throw validationError("branch_id does not match shift.branch_id");
+    }
+    if (event.entity_id !== shift.id) {
+      throw validationError("entity_id does not match shift.id");
+    }
+    if (event.event_type === "shift.opened" && shift.action === "close") {
+      throw validationError("shift.opened payload action must not be close");
+    }
+    if (event.event_type === "shift.closed" && shift.action === "open") {
+      throw validationError("shift.closed payload action must not be open");
+    }
+    if (event.event_type === "shift.opened" && !shift.opened_by_user_id) {
+      throw validationError("opened_by_user_id is required for shift.opened");
+    }
+    if (event.event_type === "shift.closed" && !shift.closed_by_user_id) {
+      throw validationError("closed_by_user_id is required for shift.closed");
+    }
+
+    const userId =
+      event.event_type === "shift.opened"
+        ? shift.opened_by_user_id
+        : shift.closed_by_user_id;
+    const [branch, register, user] = await Promise.all([
+      tx.branch.findUnique({ where: { id: event.branch_id } }),
+      tx.register.findFirst({
+        where: {
+          id: shift.register_id,
+          branchId: event.branch_id,
+        },
+      }),
+      tx.user.findUnique({ where: { id: userId } }),
+    ]);
+
+    if (!branch) {
+      throw validationError("branch_id is not registered");
+    }
+    if (!register) {
+      throw validationError("register_id is not valid for branch_id");
+    }
+    if (!user) {
+      throw validationError("shift user_id is not registered");
+    }
+  }
+
+  private async applyShiftOpened(
+    tx: Prisma.TransactionClient,
+    event: ParsedShiftEvent,
+  ) {
+    const shift = event.payload.shift;
+    const existingShift = await tx.shift.findUnique({
+      where: { id: shift.id },
+      select: { id: true },
+    });
+
+    if (existingShift) {
+      return "duplicate_ignored";
+    }
+
+    await tx.shift.create({
+      data: {
+        id: shift.id,
+        branchId: event.branch_id,
+        registerId: shift.register_id,
+        openedByUserId: shift.opened_by_user_id!,
+        openedAt: new Date(
+          shift.opened_at ?? shift.occurred_at ?? event.occurred_at,
+        ),
+        openingCashAmount: shift.opening_cash_amount,
+        status: ShiftStatus.OPEN,
+      },
+    });
+
+    return "synced";
+  }
+
+  private async applyShiftClosed(
+    tx: Prisma.TransactionClient,
+    event: ParsedShiftEvent,
+  ) {
+    const shift = event.payload.shift;
+    const existingShift = await tx.shift.findUnique({
+      where: { id: shift.id },
+      select: {
+        id: true,
+        branchId: true,
+        registerId: true,
+      },
+    });
+
+    if (!existingShift) {
+      throw validationError("shift.id is not registered");
+    }
+    if (
+      existingShift.branchId !== event.branch_id ||
+      existingShift.registerId !== shift.register_id
+    ) {
+      throw validationError("shift branch_id/register_id does not match");
+    }
+
+    await tx.shift.update({
+      where: { id: shift.id },
+      data: {
+        closedByUserId: shift.closed_by_user_id!,
+        closedAt: new Date(
+          shift.closed_at ?? shift.occurred_at ?? event.occurred_at,
+        ),
+        closingCashAmount: shift.closing_cash_amount ?? undefined,
+        status: ShiftStatus.CLOSED,
+      },
+    });
+
+    return "synced";
+  }
+
+  private async enqueueShiftJobSafely(
+    event: ParsedShiftEvent,
+    result: { syncJobId: string; resultStatus: string },
+  ): Promise<string | null> {
+    try {
+      return await this.queueService.enqueueSyncEvent(event.event_id, {
+        event_id: event.event_id,
+        sync_job_id: result.syncJobId,
+        result_status: result.resultStatus,
+      });
+    } catch (error) {
+      await this.prisma.syncLog.update({
+        where: { eventId: event.event_id },
+        data: {
+          message:
+            "Shift sync event applied; BullMQ acknowledgement job was not queued.",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+      });
+
+      return null;
+    }
+  }
+
+  private async receiveStockMovementCreatedEvent(
+    dto: SyncEventDto,
+    idempotencyKey?: string,
+  ) {
+    const parsed = stockMovementCreatedEventSchema.safeParse(dto);
+
+    if (!parsed.success) {
+      throw new BadRequestException({
+        success: false,
+        message: "validation failed",
+        error: {
+          code: "VALIDATION_ERROR",
+          details: parsed.error.issues,
+        },
+      });
+    }
+
+    const event = parsed.data;
+    const idempotencyKeyValue = idempotencyKey ?? event.event_id;
+    const duplicate = await this.prisma.syncLog.findFirst({
+      where: {
+        OR: [
+          { eventId: event.event_id },
+          { idempotencyKey: idempotencyKeyValue },
+        ],
+      },
+      select: {
+        entityId: true,
+        loggedAt: true,
+        status: true,
+        syncJobId: true,
+      },
+    });
+
+    if (duplicate) {
+      return ok({
+        event_id: event.event_id,
+        entity_id: duplicate.entityId,
+        result_status: "duplicate_ignored",
+        processed_at: duplicate.loggedAt,
+        sync_job_id: duplicate.syncJobId,
+        queue_job_id: null,
+      });
+    }
+
+    const result = await this.applyStockMovementCreatedEvent(
+      event,
+      idempotencyKeyValue,
+    );
+    const queueJobId = await this.enqueueStockMovementJobSafely(event, result);
+
+    return ok({
+      event_id: event.event_id,
+      entity_id: event.payload.stock_movement.id,
+      result_status: result.resultStatus,
+      processed_at: result.processedAt,
+      sync_job_id: result.syncJobId,
+      queue_job_id: queueJobId,
+    });
+  }
+
+  private async applyStockMovementCreatedEvent(
+    event: ParsedStockMovementCreatedEvent,
+    idempotencyKey: string,
+  ) {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.validateStockMovementEventReferences(tx, event);
+
+        const movement = event.payload.stock_movement;
+        const job = await tx.syncJob.create({
+          data: {
+            branchId: event.branch_id,
+            triggeredByUserId: event.produced_by_user_id,
+            jobType: "push_stock_movement_created",
+            entityType: "stock_movement",
+            entityId: movement.id,
+            payloadReference: event.event_id,
+            status: SyncJobStatus.PROCESSING,
+            attemptCount: 1,
+            lastAttemptAt: new Date(),
+          },
+        });
+
+        const existingMovement = await tx.stockMovement.findUnique({
+          where: { id: movement.id },
+          select: { id: true },
+        });
+
+        let resultStatus = "synced";
+        if (existingMovement) {
+          resultStatus = "duplicate_ignored";
+        } else {
+          await this.applyStandaloneStockMovement(tx, event);
+        }
+
+        await tx.syncLog.create({
+          data: {
+            syncJobId: job.id,
+            eventId: event.event_id,
+            eventType: event.event_type,
+            eventVersion: String(event.event_version),
+            branchId: event.branch_id,
+            entityType: "stock_movement",
+            entityId: movement.id,
+            status:
+              resultStatus === "duplicate_ignored"
+                ? SyncLogStatus.DUPLICATE_IGNORED
+                : SyncLogStatus.APPLIED,
+            logLevel: "info",
+            message:
+              resultStatus === "duplicate_ignored"
+                ? "Stock movement already applied by movement id."
+                : "Stock movement created sync event applied.",
+            idempotencyKey,
+            payload: event as unknown as Prisma.InputJsonValue,
+            producedById: event.produced_by_user_id,
+            occurredAt: new Date(event.occurred_at),
+          },
+        });
+
+        await tx.syncJob.update({
+          where: { id: job.id },
+          data: { status: SyncJobStatus.SUCCESS },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            userId:
+              movement.performed_by_user_id ??
+              event.produced_by_user_id ??
+              undefined,
+            branchId: event.branch_id,
+            entityType: "stock_movement",
+            entityId: movement.id,
+            action:
+              resultStatus === "duplicate_ignored"
+                ? "sync_stock_movement_duplicate_ignored"
+                : "sync_stock_movement_created",
+            note: `Applied sync event ${event.event_id}`,
+          },
+        });
+
+        return {
+          syncJobId: job.id,
+          resultStatus,
+          processedAt: new Date(),
+        };
+      });
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException({
+        success: false,
+        message: "sync failed",
+        error: {
+          code: "SYNC_FAILED",
+          details: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  private async validateStockMovementEventReferences(
+    tx: Prisma.TransactionClient,
+    event: ParsedStockMovementCreatedEvent,
+  ) {
+    const movement = event.payload.stock_movement;
+
+    if (event.branch_id !== movement.branch_id) {
+      throw validationError(
+        "branch_id does not match stock_movement.branch_id",
+      );
+    }
+    if (event.entity_id !== movement.id) {
+      throw validationError("entity_id does not match stock_movement.id");
+    }
+
+    const userIds = [
+      movement.performed_by_user_id,
+      event.produced_by_user_id,
+    ].filter((userId): userId is string => Boolean(userId));
+    const [branch, product, users] = await Promise.all([
+      tx.branch.findUnique({ where: { id: event.branch_id } }),
+      tx.product.findUnique({ where: { id: movement.product_id } }),
+      userIds.length > 0
+        ? tx.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    if (!branch) {
+      throw validationError("branch_id is not registered");
+    }
+    if (!product) {
+      throw validationError("product_id is not registered");
+    }
+    if (users.length !== new Set(userIds).size) {
+      throw validationError("user_id is not registered");
+    }
+  }
+
+  private async applyStandaloneStockMovement(
+    tx: Prisma.TransactionClient,
+    event: ParsedStockMovementCreatedEvent,
+  ) {
+    const movement = event.payload.stock_movement;
+    const balance = await tx.inventoryBalance.upsert({
+      where: {
+        branchId_productId: {
+          branchId: event.branch_id,
+          productId: movement.product_id,
+        },
+      },
+      create: {
+        branchId: event.branch_id,
+        productId: movement.product_id,
+        quantityOnHand: 0,
+      },
+      update: {},
+    });
+    const before = new Prisma.Decimal(balance.quantityOnHand);
+    const delta = new Prisma.Decimal(movement.quantity_delta);
+    const after = before.plus(delta);
+
+    await tx.stockMovement.create({
+      data: {
+        id: movement.id,
+        branchId: event.branch_id,
+        productId: movement.product_id,
+        sourceType: movement.source_type,
+        sourceId: movement.source_id ?? undefined,
+        movementType: toStockMovementType(movement.movement_type),
+        quantityDelta: delta,
+        quantityBefore: before,
+        quantityAfter: after,
+        reasonCode: movement.reason_code,
+        notes: movement.notes ?? undefined,
+        performedByUserId: movement.performed_by_user_id ?? undefined,
+        movementAt: new Date(movement.movement_at),
+        syncStatus: "synced",
+      },
+    });
+
+    await tx.inventoryBalance.update({
+      where: {
+        branchId_productId: {
+          branchId: event.branch_id,
+          productId: movement.product_id,
+        },
+      },
+      data: {
+        quantityOnHand: after,
+      },
+    });
+  }
+
+  private async enqueueStockMovementJobSafely(
+    event: ParsedStockMovementCreatedEvent,
+    result: { syncJobId: string; resultStatus: string },
+  ): Promise<string | null> {
+    try {
+      return await this.queueService.enqueueSyncEvent(event.event_id, {
+        event_id: event.event_id,
+        sync_job_id: result.syncJobId,
+        result_status: result.resultStatus,
+      });
+    } catch (error) {
+      await this.prisma.syncLog.update({
+        where: { eventId: event.event_id },
+        data: {
+          message:
+            "Stock movement sync event applied; BullMQ acknowledgement job was not queued.",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+      });
+
+      return null;
+    }
   }
 
   private async applyTransactionBundle(
@@ -631,6 +1279,31 @@ function validationError(message: string): BadRequestException {
       details: [{ message }],
     },
   });
+}
+
+function toShiftJobType(eventType: ParsedShiftEvent["event_type"]): string {
+  return eventType === "shift.opened"
+    ? "push_shift_opened"
+    : "push_shift_closed";
+}
+
+function toShiftAuditAction(eventType: ParsedShiftEvent["event_type"]): string {
+  return eventType === "shift.opened"
+    ? "sync_shift_opened"
+    : "sync_shift_closed";
+}
+
+function toShiftSyncLogMessage(
+  eventType: ParsedShiftEvent["event_type"],
+  resultStatus: string,
+): string {
+  if (resultStatus === "duplicate_ignored") {
+    return "Shift sync event already applied by shift id.";
+  }
+
+  return eventType === "shift.opened"
+    ? "Shift opened sync event applied."
+    : "Shift closed sync event applied.";
 }
 
 function toPaymentStatus(status: string): PaymentStatus {

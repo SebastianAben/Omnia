@@ -102,7 +102,7 @@ export const useAppState = create<AppStore>()(
     user: defaultUser,
     token: undefined,
     activeShiftId: undefined,
-    shiftStatus: "open",
+    shiftStatus: "closed",
     isOnline: true,
     pendingSyncCount: 0,
     setRole: (role) =>

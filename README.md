@@ -2,9 +2,11 @@
 
 Omnia adalah Hybrid Omnichannel Smart POS untuk retail dan UMKM multi-cabang. MVP berfokus pada POS local-first, inventory, sync ke pusat, dashboard dasar, Shopee integration, dan AI insights sederhana.
 
-## Sprint 0 Status
+## Implementation Status
 
-Repo ini sedang berada di Sprint 0: fondasi project, bukan fitur bisnis lengkap. Target Sprint 0 adalah membuat monorepo, desktop app shell, backend API skeleton, database foundation, auth skeleton, sync skeleton, seed data, dan deployment/env contract siap dikembangkan.
+Sprint 0 foundation sudah selesai dan repo sudah mulai masuk parsial ke fitur MVP awal. Fondasi monorepo, desktop app shell, backend API, database, auth demo, sync foundation, seed data, CI/CD, dan deployment/env contract sudah tersedia.
+
+Fitur yang sudah mulai berjalan meliputi POS checkout local-first ke SQLite, shift dasar, inventory adjustment MVP, receipt preview, sync status/replay transaksi, shift, dan stock movement, backend apply `transaction.bundle`, `shift.opened`/`shift.closed`, serta `stock_movement.created` ke central DB. Fitur yang masih belum final: UI Figma/pixel-perfect, auth production-grade, dashboard/reporting, Shopee integration, dan AI insights.
 
 ## Struktur Repo
 

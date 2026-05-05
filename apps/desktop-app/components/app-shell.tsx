@@ -9,6 +9,7 @@ import {
   Clock3,
   LayoutDashboard,
   MonitorCog,
+  PackageSearch,
   ReceiptText,
   ScrollText,
   RefreshCcw,
@@ -30,6 +31,7 @@ const navByRole: Record<
     { href: "/workspace", label: "Branch Ops", icon: LayoutDashboard },
     { href: "/pos", label: "POS", icon: ReceiptText },
     { href: "/shift", label: "Shift", icon: Clock3 },
+    { href: "/inventory", label: "Inventory", icon: PackageSearch },
     { href: "/receipts", label: "Receipts", icon: ScrollText },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
   ],
@@ -57,7 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             Omnia
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            Sprint 3 POS workspace
+            Branch operations workspace
           </div>
         </div>
 
