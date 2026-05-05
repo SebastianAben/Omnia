@@ -70,6 +70,43 @@ pnpm dev
 - `pnpm format`
 - `pnpm format:check`
 
+## CI/CD Home Server
+
+Backend deployment memakai GitHub Actions dan self-hosted runner di home server.
+
+- `dev` deploy ke `/home/froztbitez/web-server/omnia/dev` dengan host port `4101`
+- `main` deploy ke `/home/froztbitez/web-server/omnia/main` dengan host port `4100`
+- Compose project dipisah menjadi `omnia-dev` dan `omnia-main`
+- Secret server disimpan di `.env.server` pada folder deployment, bukan di repo
+
+Setup awal di home server:
+
+```bash
+mkdir -p /home/froztbitez/web-server/omnia/dev
+mkdir -p /home/froztbitez/web-server/omnia/main
+```
+
+Copy `deploy/home-server/.env.server.example` menjadi `.env.server` di masing-masing folder deployment, lalu sesuaikan `COMPOSE_PROJECT_NAME`, `BACKEND_IMAGE`, `BACKEND_HOST_PORT`, `APP_ENV`, `PUBLIC_API_URL`, `CORS_ORIGINS`, dan secret.
+
+Runner GitHub untuk repo `SebastianAben/Omnia` perlu dibuat satu kali dari GitHub repository settings dengan label:
+
+```text
+self-hosted, linux, x64, omnia-home
+```
+
+Folder runner yang direkomendasikan:
+
+```text
+/home/froztbitez/actions-runner-omnia
+```
+
+Setelah membuat token runner di GitHub, jalankan di home server:
+
+```bash
+cd /path/to/Omnia
+RUNNER_TOKEN=replace-with-github-runner-token scripts/setup-home-runner.sh
+```
+
 ## Environment Strategy
 
 Deployment values must come from environment variables. Do not hardcode production URLs or secrets in source code.

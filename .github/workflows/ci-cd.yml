@@ -1,0 +1,66 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+  deploy:
+    name: Deploy backend
+    needs: ci
+    if: |
+      (github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'main')) ||
+      (github.event_name == 'pull_request' && (github.base_ref == 'dev' || github.base_ref == 'main'))
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - omnia-home
+    environment: ${{ format('omnia-{0}', github.event_name == 'pull_request' && github.base_ref || github.ref_name) }}
+    concurrency:
+      group: omnia-${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to home server
+        env:
+          DEPLOY_TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
+        run: scripts/deploy-home-server.sh
