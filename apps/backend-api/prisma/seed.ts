@@ -322,13 +322,56 @@ async function main(): Promise<void> {
     },
   });
 
-  await prisma.salesChannel.upsert({
+  const shopeeChannel = await prisma.salesChannel.upsert({
     where: { code: "shopee" },
     update: { name: "Shopee", type: "marketplace", isActive: true },
     create: {
       code: "shopee",
       name: "Shopee",
       type: "marketplace",
+    },
+  });
+
+  const shopeeStore = await prisma.channelStore.upsert({
+    where: {
+      salesChannelId_externalStoreId: {
+        salesChannelId: shopeeChannel.id,
+        externalStoreId: "SHP-DEMO-STORE",
+      },
+    },
+    update: {
+      storeName: "Demo Shopee Store",
+      authStatus: "connected",
+      isActive: true,
+      connectedAt: new Date(),
+    },
+    create: {
+      salesChannelId: shopeeChannel.id,
+      storeName: "Demo Shopee Store",
+      externalStoreId: "SHP-DEMO-STORE",
+      authStatus: "connected",
+      connectedAt: new Date(),
+    },
+  });
+
+  await prisma.productChannelMapping.upsert({
+    where: {
+      channelStoreId_externalSku: {
+        channelStoreId: shopeeStore.id,
+        externalSku: "SHP-SKU-DEMO-001",
+      },
+    },
+    update: {
+      productId: product.id,
+      externalProductId: "SHP-PROD-DEMO-001",
+      mappingStatus: "mapped",
+    },
+    create: {
+      channelStoreId: shopeeStore.id,
+      productId: product.id,
+      externalProductId: "SHP-PROD-DEMO-001",
+      externalSku: "SHP-SKU-DEMO-001",
+      mappingStatus: "mapped",
     },
   });
 
