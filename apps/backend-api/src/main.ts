@@ -25,7 +25,24 @@ async function bootstrap(): Promise<void> {
   );
 
   app.enableCors({
-    origin: config.corsOrigins,
+    origin: (
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void,
+    ) => {
+      if (
+        !origin ||
+        config.corsOrigins.includes(origin) ||
+        (config.appEnv === "local" &&
+          /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}):3000$/.test(
+            origin,
+          ))
+      ) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS origin not allowed: ${origin}`), false);
+    },
     credentials: true,
   });
 

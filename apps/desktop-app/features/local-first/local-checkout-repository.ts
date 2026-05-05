@@ -107,6 +107,18 @@ const requireLocalStore = () => {
   return desktopWindow.omniaDesktop.localStore;
 };
 
+export const isLocalStoreBridgeAvailable = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const desktopWindow = window as Window & {
+    omniaDesktop?: { localStore?: LocalStoreBridge };
+  };
+
+  return Boolean(desktopWindow.omniaDesktop?.localStore);
+};
+
 export async function saveCheckoutLocally(input: {
   branch: BranchContext;
   register: RegisterContext;

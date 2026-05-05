@@ -1,4 +1,3 @@
-docs/
 .DS_Store
 node_modules/
 .pnpm-store/
@@ -15,3 +14,4 @@ apps/*/.omnia/
 .env.local
 .env.*.local
 *.log
+docs/

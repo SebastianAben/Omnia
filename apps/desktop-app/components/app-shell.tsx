@@ -13,6 +13,7 @@ import {
   ReceiptText,
   ScrollText,
   RefreshCcw,
+  ShieldCheck,
 } from "lucide-react";
 import { roleLabels, type OmniaRole, useAppState } from "@/lib/app-state";
 import { StatusBar } from "@/components/status-bar";
@@ -28,21 +29,24 @@ const navByRole: Record<
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
   ],
   supervisor: [
-    { href: "/workspace", label: "Branch Ops", icon: LayoutDashboard },
+    { href: "/workspace", label: "Dashboard", icon: LayoutDashboard },
     { href: "/pos", label: "POS", icon: ReceiptText },
     { href: "/shift", label: "Shift", icon: Clock3 },
     { href: "/inventory", label: "Inventory", icon: PackageSearch },
     { href: "/receipts", label: "Receipts", icon: ScrollText },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
+    { href: "/audit", label: "Audit", icon: ShieldCheck },
   ],
   hq_admin: [
-    { href: "/workspace", label: "Control", icon: MonitorCog },
+    { href: "/workspace", label: "Dashboard", icon: MonitorCog },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
+    { href: "/audit", label: "Audit", icon: ShieldCheck },
     { href: "/pos", label: "POS Preview", icon: ReceiptText },
   ],
   executive: [
-    { href: "/workspace", label: "Analytics", icon: BarChart3 },
+    { href: "/workspace", label: "Dashboard", icon: BarChart3 },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
+    { href: "/audit", label: "Audit", icon: ShieldCheck },
   ],
 };
 

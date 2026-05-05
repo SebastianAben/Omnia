@@ -1,10 +1,10 @@
 import { AppShell } from "@/components/app-shell";
-import { BranchWorkspace } from "@/features/shell/branch-workspace";
+import { DashboardWorkspace } from "@/features/dashboard/dashboard-workspace";
 
 export default function WorkspacePage() {
   return (
     <AppShell>
-      <BranchWorkspace />
+      <DashboardWorkspace />
     </AppShell>
   );
 }
