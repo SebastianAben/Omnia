@@ -8,6 +8,9 @@ apps/*/dist/
 apps/*/dist-*/
 apps/*/.next/
 *.tsbuildinfo
+__pycache__/
+*.pyc
+_tmp_*
 .omnia/
 apps/*/.omnia/
 .env

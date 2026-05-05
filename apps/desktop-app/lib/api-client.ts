@@ -11,8 +11,33 @@ export type ApiEnvelope<T> = {
 
 const defaultApiBaseUrl = "http://localhost:4000/api/v1";
 
-export const getApiBaseUrl = () =>
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? defaultApiBaseUrl;
+const localHostnames = new Set(["localhost", "127.0.0.1", "::1"]);
+
+export const getApiBaseUrl = () => {
+  const configuredBaseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? defaultApiBaseUrl;
+
+  if (typeof window === "undefined") {
+    return configuredBaseUrl;
+  }
+
+  const pageHostname = window.location.hostname;
+  if (localHostnames.has(pageHostname)) {
+    return configuredBaseUrl;
+  }
+
+  try {
+    const apiUrl = new URL(configuredBaseUrl);
+    if (localHostnames.has(apiUrl.hostname)) {
+      apiUrl.hostname = pageHostname;
+      return apiUrl.toString().replace(/\/$/, "");
+    }
+  } catch {
+    return configuredBaseUrl;
+  }
+
+  return configuredBaseUrl;
+};
 
 export class ApiClientError extends Error {
   constructor(

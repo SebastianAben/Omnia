@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
 import { AuthModule } from "./auth/auth.module";
+import { AiModule } from "./ai/ai.module";
 import { AuditModule } from "./audit/audit.module";
 import { BranchesModule } from "./branches/branches.module";
 import { CategoriesModule } from "./categories/categories.module";
@@ -31,6 +32,7 @@ import { ShopeeWebhookModule } from "./webhooks/shopee/shopee-webhook.module";
     }),
     PrismaModule,
     QueueModule,
+    AiModule,
     HealthModule,
     AuthModule,
     UsersModule,

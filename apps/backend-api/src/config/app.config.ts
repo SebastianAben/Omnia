@@ -15,6 +15,7 @@ export const appConfig = registerAs("app", () => {
   return {
     appEnv: env.APP_ENV,
     port: Number(env.PORT),
+    host: env.HOST,
     publicApiUrl: env.PUBLIC_API_URL,
     corsOrigins: splitCorsOrigins(env.CORS_ORIGINS),
     databaseUrl: env.DATABASE_URL,

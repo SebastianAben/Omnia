@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@omnia/ui";
 
-import { useAppState } from "@/lib/app-state";
+import { createDemoSession, useAppState } from "@/lib/app-state";
 import { ApiClientError } from "@/lib/api-client";
 import { loginWithPassword } from "./auth-service";
 
@@ -15,6 +15,11 @@ export function LoginForm() {
   const [password, setPassword] = useState("password123");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setSubmitting] = useState(false);
+
+  const continueWithDemo = () => {
+    setSession(createDemoSession());
+    router.push("/pos");
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -33,7 +38,7 @@ export function LoginForm() {
       const message =
         caught instanceof ApiClientError
           ? caught.message
-          : "Backend belum tersedia. Gunakan role switcher di shell untuk demo.";
+          : "Backend belum tersedia. Lanjutkan mode demo untuk POS lokal dan role switcher.";
       setError(message);
     } finally {
       setSubmitting(false);
@@ -69,6 +74,14 @@ export function LoginForm() {
 
       <Button disabled={isSubmitting} type="submit">
         {isSubmitting ? "Signing in..." : "Continue to POS"}
+      </Button>
+      <Button
+        disabled={isSubmitting}
+        onClick={continueWithDemo}
+        type="button"
+        variant="secondary"
+      >
+        Continue in demo mode
       </Button>
     </form>
   );
