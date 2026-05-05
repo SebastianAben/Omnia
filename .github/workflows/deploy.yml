@@ -112,6 +112,13 @@ jobs:
       - name: Prepare deploy script
         run: chmod +x scripts/deploy-home-server.sh
 
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Deploy to home server
         env:
           DEPLOY_TARGET_BRANCH: ${{ needs.build-image.outputs.target_branch }}
