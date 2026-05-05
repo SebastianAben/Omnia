@@ -119,11 +119,22 @@ function ensureLocalStore() {
 
 function applyLocalStoreMigrations(dbPath: string) {
   const statements = [
+    "ALTER TABLE sync_queue_local ADD COLUMN event_version INTEGER NOT NULL DEFAULT 1;",
+    "ALTER TABLE sync_queue_local ADD COLUMN branch_id TEXT NOT NULL DEFAULT 'br_demo';",
+    "ALTER TABLE sync_queue_local ADD COLUMN source_system TEXT NOT NULL DEFAULT 'branch_app';",
+    "ALTER TABLE sync_queue_local ADD COLUMN source_mode TEXT NOT NULL DEFAULT 'online';",
     "ALTER TABLE sync_queue_local ADD COLUMN next_retry_at TEXT;",
     "ALTER TABLE sync_queue_local ADD COLUMN last_error_code TEXT;",
     "ALTER TABLE sync_queue_local ADD COLUMN last_error_message TEXT;",
     "ALTER TABLE sync_queue_local ADD COLUMN acknowledged_at TEXT;",
     "ALTER TABLE sync_queue_local ADD COLUMN ack_status TEXT;",
+    "ALTER TABLE stock_movements_local ADD COLUMN source_type TEXT NOT NULL DEFAULT 'sales_transaction';",
+    "ALTER TABLE stock_movements_local ADD COLUMN source_id TEXT;",
+    "ALTER TABLE stock_movements_local ADD COLUMN quantity_before REAL;",
+    "ALTER TABLE stock_movements_local ADD COLUMN quantity_after REAL;",
+    "ALTER TABLE stock_movements_local ADD COLUMN reason_code TEXT NOT NULL DEFAULT 'legacy';",
+    "ALTER TABLE stock_movements_local ADD COLUMN notes TEXT;",
+    "ALTER TABLE stock_movements_local ADD COLUMN performed_by_user_id TEXT;",
   ];
 
   for (const statement of statements) {
