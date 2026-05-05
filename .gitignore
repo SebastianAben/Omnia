@@ -13,4 +13,3 @@ apps/*/.omnia/
 .env.local
 .env.*.local
 *.log
-docs/
