@@ -112,6 +112,14 @@ openssl rand -hex 32
 
 Nilai password di `POSTGRES_PASSWORD` harus sama dengan password di `DATABASE_URL`.
 
+Jika deploy gagal dengan `Prisma P1000: Authentication failed`, cek volume
+PostgreSQL yang sudah ada. Log `PostgreSQL Database directory appears to contain
+a database; Skipping initialization` berarti `POSTGRES_PASSWORD` baru tidak akan
+mengubah password user di database lama. Untuk mempertahankan data, kembalikan
+`POSTGRES_PASSWORD` dan password di `DATABASE_URL` ke password lama. Untuk
+database kosong, hentikan compose lalu hapus volume sesuai environment, misalnya
+`docker volume rm omnia-dev_postgres_data`, kemudian deploy ulang.
+
 Contoh nilai environment-specific:
 
 ```text

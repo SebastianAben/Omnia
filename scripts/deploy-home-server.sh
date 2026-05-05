@@ -67,6 +67,34 @@ show_compose_diagnostics() {
   "${compose[@]}" logs --tail=100 postgres || true
 }
 
+verify_postgres_auth() {
+  set +e
+  "${compose[@]}" exec -T postgres sh -lc 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "SELECT 1" >/dev/null'
+  local auth_status=$?
+  set -e
+
+  if [[ "$auth_status" -ne 0 ]]; then
+    cat >&2 <<EOF
+PostgreSQL authentication failed before running migrations.
+
+This usually means the existing Docker volume was initialized with a different
+POSTGRES_PASSWORD than the one in $deploy_dir/.env.server. PostgreSQL only uses
+POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB during first initialization;
+changing them later does not update an existing database volume.
+
+Fix one of these before redeploying:
+- Keep existing data: set POSTGRES_PASSWORD and DATABASE_URL in .env.server back
+  to the password used when the volume was first created.
+- Start with a fresh database: run
+  ${compose[*]} down
+  docker volume rm ${compose_project}_postgres_data
+  then deploy again.
+EOF
+    show_compose_diagnostics
+    exit "$auth_status"
+  fi
+}
+
 run_migration() {
   set +e
   "${compose[@]}" run --rm migrate
@@ -85,6 +113,9 @@ log_step "Pull backend and migrate images"
 
 log_step "Start PostgreSQL and Redis"
 "${compose[@]}" up -d postgres redis
+
+log_step "Verify PostgreSQL credentials"
+verify_postgres_auth
 
 log_step "Run database migration"
 run_migration
