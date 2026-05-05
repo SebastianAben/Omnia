@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { Badge } from "@omnia/ui";
 
 import { WorkspacePanel } from "@/components/app-shell";
-import { listLocalSyncQueue } from "@/features/local-first/local-checkout-repository";
+import {
+  listLocalSyncQueue,
+  replayPendingSync,
+  type LocalSyncQueueRecord,
+} from "@/features/local-first/local-checkout-repository";
 import { useAppState } from "@/lib/app-state";
 import { getLocalSyncSummary, type SyncQueueSummary } from "./sync-summary";
 
@@ -22,18 +26,45 @@ const formatStatus = (item: SyncQueueSummary) => {
 
 export function SyncStatusPanel() {
   const [summary, setSummary] = useState<SyncQueueSummary[]>([]);
-  const [queue, setQueue] = useState<ReturnType<typeof listLocalSyncQueue>>([]);
+  const [queue, setQueue] = useState<LocalSyncQueueRecord[]>([]);
+  const [replayMessage, setReplayMessage] = useState<string | null>(null);
+  const [isReplaying, setReplaying] = useState(false);
+  const token = useAppState((state) => state.token);
   const setPendingSyncCount = useAppState((state) => state.setPendingSyncCount);
 
   useEffect(() => {
-    const nextSummary = getLocalSyncSummary();
-    const nextQueue = listLocalSyncQueue();
-    setSummary(nextSummary);
+    void refreshQueue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setPendingSyncCount]);
+
+  const refreshQueue = async () => {
+    const nextQueue = await listLocalSyncQueue();
+    const nextSummary = getLocalSyncSummary(nextQueue);
     setQueue(nextQueue);
+    setSummary(nextSummary);
     setPendingSyncCount(
       nextSummary.reduce((total, item) => total + item.pending, 0),
     );
-  }, [setPendingSyncCount]);
+  };
+
+  const handleReplay = async () => {
+    setReplaying(true);
+    setReplayMessage(null);
+
+    try {
+      const result = await replayPendingSync(token);
+      setReplayMessage(
+        `${result.attempted} attempted, ${result.synced} synced, ${result.failed} failed.`,
+      );
+      await refreshQueue();
+    } catch (error) {
+      setReplayMessage(
+        error instanceof Error ? error.message : "Sync replay failed.",
+      );
+    } finally {
+      setReplaying(false);
+    }
+  };
 
   return (
     <WorkspacePanel
@@ -41,6 +72,25 @@ export function SyncStatusPanel() {
       description="Branch-side sync monitor for pending checkout bundles and local-first replay readiness."
       title="Sync Status"
     >
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-slate-600">
+          Replay pending and failed checkout bundles to the central backend.
+        </div>
+        <button
+          className="h-9 rounded-md bg-slate-950 px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+          disabled={isReplaying}
+          onClick={handleReplay}
+          type="button"
+        >
+          {isReplaying ? "Replaying..." : "Replay Sync"}
+        </button>
+      </div>
+      {replayMessage ? (
+        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          {replayMessage}
+        </div>
+      ) : null}
+
       <div className="grid gap-3">
         {summary.map((item) => (
           <div

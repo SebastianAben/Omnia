@@ -9,6 +9,7 @@ import type {
   PaymentMethod,
   PaymentStatus,
 } from "@/features/pos/pos-types";
+import { getApiBaseUrl } from "@/lib/api-client";
 
 export type LocalTransactionRecord = {
   id: string;
@@ -28,167 +29,86 @@ export type LocalTransactionRecord = {
 export type LocalSyncQueueRecord = {
   id: string;
   eventId: string;
-  eventType: "transaction.bundle";
+  eventType: string;
   branchId: string;
   entityId: string;
   payload: unknown;
   status: LocalTransactionRecord["syncStatus"];
   attemptCount: number;
   createdAt: string;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
 };
 
-const transactionsKey = "omnia.local.transactions";
-const queueKey = "omnia.local.sync_queue";
-
-const readJson = <T>(key: string, fallback: T): T => {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
-  const raw = window.localStorage.getItem(key);
-  if (!raw) {
-    return fallback;
-  }
-
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+type LocalStoreBridge = {
+  saveCheckout: (input: unknown) => Promise<{
+    transactionId: string;
+    transactionNo: string;
+    eventId: string;
+    total: number;
+  }>;
+  listTransactions: () => Promise<LocalTransactionRecord[]>;
+  listSyncQueue: () => Promise<LocalSyncQueueRecord[]>;
+  replaySync: (input: {
+    apiBaseUrl: string;
+    token?: string;
+  }) => Promise<{ attempted: number; synced: number; failed: number }>;
+  saveShiftEvent: (input: unknown) => Promise<{
+    shiftId: string;
+    eventId: string;
+  }>;
 };
 
-const writeJson = (key: string, value: unknown) => {
-  if (typeof window === "undefined") {
-    return;
+const requireLocalStore = () => {
+  const desktopWindow = window as Window & {
+    omniaDesktop?: { localStore?: LocalStoreBridge };
+  };
+
+  if (!desktopWindow.omniaDesktop?.localStore) {
+    throw new Error("Omnia desktop local store bridge is not available.");
   }
 
-  window.localStorage.setItem(key, JSON.stringify(value));
+  return desktopWindow.omniaDesktop.localStore;
 };
 
-const createId = (prefix: string) =>
-  `${prefix}_${Date.now().toString(36)}_${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
-
-export function saveCheckoutLocally(input: {
+export async function saveCheckoutLocally(input: {
   branch: BranchContext;
   register: RegisterContext;
   user: SessionUser;
+  shiftId?: string | null;
   lines: CartLine[];
   totals: CartTotals;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   amountReceived: number;
 }) {
-  const createdAt = new Date().toISOString();
-  const transactionId = createId("trx");
-  const eventId = createId("evt");
-  const transactionNo = `TRX-${input.branch.code}-${input.register.id}-${Date.now()}`;
-
-  const transaction: LocalTransactionRecord = {
-    id: transactionId,
-    transactionNo,
-    branchId: input.branch.id,
-    registerId: input.register.id,
-    userId: input.user.id,
-    lines: input.lines,
-    totals: input.totals,
-    paymentMethod: input.paymentMethod,
-    paymentStatus: input.paymentStatus,
-    amountReceived: input.amountReceived,
-    createdAt,
-    syncStatus: "pending",
-  };
-
-  const payload = {
-    transaction: {
-      id: transaction.id,
-      transaction_no: transaction.transactionNo,
-      branch_id: transaction.branchId,
-      register_id: transaction.registerId,
-      user_id: transaction.userId,
-      subtotal: input.totals.subtotal,
-      discount_total: input.totals.discountTotal,
-      tax_total: input.totals.taxTotal,
-      grand_total: input.totals.grandTotal,
-      payment_status: input.paymentStatus,
-      created_at: createdAt,
-    },
-    items: input.lines.map((line) => ({
-      id: createId("item"),
-      transaction_id: transaction.id,
-      product_id: line.product.id,
-      sku: line.product.sku,
-      name: line.product.name,
-      quantity: line.quantity,
-      unit_price: line.product.price,
-      discount_total: line.discountTotal,
-      subtotal: line.product.price * line.quantity - line.discountTotal,
-    })),
-    payments: [
-      {
-        id: createId("pay"),
-        transaction_id: transaction.id,
-        method: input.paymentMethod,
-        amount: input.totals.grandTotal,
-        amount_received: input.amountReceived,
-        change_amount: Math.max(
-          input.amountReceived - input.totals.grandTotal,
-          0,
-        ),
-        status: input.paymentStatus,
-        recorded_at: createdAt,
-      },
-    ],
-    stock_movements: input.lines.map((line) => ({
-      id: createId("mov"),
-      branch_id: input.branch.id,
-      product_id: line.product.id,
-      source_type: "sales_transaction",
-      source_id: transaction.id,
-      movement_type: "sale",
-      quantity_delta: -line.quantity,
-      quantity_before: line.product.stockOnHand,
-      quantity_after: Math.max(line.product.stockOnHand - line.quantity, 0),
-      reason_code: "pos_sale",
-      performed_by_user_id: input.user.id,
-      occurred_at: createdAt,
-    })),
-  };
-
-  const syncRecord: LocalSyncQueueRecord = {
-    id: createId("sync"),
-    eventId,
-    eventType: "transaction.bundle",
-    branchId: input.branch.id,
-    entityId: transaction.id,
-    payload,
-    status: "pending",
-    attemptCount: 0,
-    createdAt,
-  };
-
-  writeJson(transactionsKey, [
-    transaction,
-    ...readJson<LocalTransactionRecord[]>(transactionsKey, []),
-  ]);
-  writeJson(queueKey, [
-    syncRecord,
-    ...readJson<LocalSyncQueueRecord[]>(queueKey, []),
-  ]);
-
-  return {
-    transactionId,
-    transactionNo,
-    eventId,
-    total: input.totals.grandTotal,
-  };
+  return requireLocalStore().saveCheckout(input);
 }
 
-export function listLocalSyncQueue() {
-  return readJson<LocalSyncQueueRecord[]>(queueKey, []);
+export async function listLocalSyncQueue() {
+  return requireLocalStore().listSyncQueue() as Promise<LocalSyncQueueRecord[]>;
 }
 
-export function listLocalTransactions() {
-  return readJson<LocalTransactionRecord[]>(transactionsKey, []);
+export async function listLocalTransactions() {
+  return requireLocalStore().listTransactions() as Promise<
+    LocalTransactionRecord[]
+  >;
+}
+
+export async function replayPendingSync(token?: string) {
+  return requireLocalStore().replaySync({
+    apiBaseUrl: getApiBaseUrl(),
+    token,
+  });
+}
+
+export async function saveShiftEvent(input: {
+  branch: BranchContext;
+  register: RegisterContext;
+  user: SessionUser;
+  action: "open" | "close";
+  openingCashAmount?: number;
+  closingCashAmount?: number;
+}) {
+  return requireLocalStore().saveShiftEvent(input);
 }

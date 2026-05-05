@@ -1,4 +1,4 @@
-import { listLocalSyncQueue } from "@/features/local-first/local-checkout-repository";
+import type { LocalSyncQueueRecord } from "@/features/local-first/local-checkout-repository";
 
 export type SyncQueueSummary = {
   label: string;
@@ -8,8 +8,9 @@ export type SyncQueueSummary = {
   status: "success" | "warning" | "danger";
 };
 
-export function getLocalSyncSummary(): SyncQueueSummary[] {
-  const queue = listLocalSyncQueue();
+export function getLocalSyncSummary(
+  queue: LocalSyncQueueRecord[],
+): SyncQueueSummary[] {
   const transactionQueue = queue.filter(
     (record) => record.eventType === "transaction.bundle",
   );

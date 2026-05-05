@@ -24,6 +24,34 @@ export type LoginResult = {
   branch?: BranchContext;
 };
 
+const sessionTokenKey = "omnia.auth.token";
+
+const mapSession = (data: LoginResponse): LoginResult => ({
+  token: data.token,
+  user: {
+    id: data.user.id,
+    fullName: data.user.full_name,
+    username: data.user.username,
+    role: roleFromApi(data.user.role_code),
+    branchId: data.user.branch_id,
+  },
+  branch: data.branches[0]
+    ? {
+        id: data.branches[0].id,
+        code: data.branches[0].code,
+        name: data.branches[0].name,
+      }
+    : undefined,
+});
+
+export function saveSessionToken(token: string) {
+  window.localStorage.setItem(sessionTokenKey, token);
+}
+
+export function readSessionToken() {
+  return window.localStorage.getItem(sessionTokenKey) ?? undefined;
+}
+
 export async function loginWithPassword(input: {
   username: string;
   password: string;
@@ -38,21 +66,20 @@ export async function loginWithPassword(input: {
     }),
   });
 
-  return {
-    token: data.token,
-    user: {
-      id: data.user.id,
-      fullName: data.user.full_name,
-      username: data.user.username,
-      role: roleFromApi(data.user.role_code),
-      branchId: data.user.branch_id,
-    },
-    branch: data.branches[0]
-      ? {
-          id: data.branches[0].id,
-          code: data.branches[0].code,
-          name: data.branches[0].name,
-        }
-      : undefined,
-  };
+  const session = mapSession(data);
+  saveSessionToken(session.token);
+  return session;
+}
+
+export async function restoreSession(): Promise<LoginResult | null> {
+  const token = readSessionToken();
+  if (!token) {
+    return null;
+  }
+
+  const data = await apiFetch<Omit<LoginResponse, "token">>("/auth/me", {
+    token,
+  });
+
+  return mapSession({ ...data, token });
 }
