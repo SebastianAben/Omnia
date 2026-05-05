@@ -1,0 +1,62 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Validate and deploy backend
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - omnia-home
+    environment: ${{ format('omnia-{0}', github.event_name == 'pull_request' && github.base_ref || github.ref_name) }}
+    concurrency:
+      group: omnia-${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Clean local env files
+        run: rm -f .env apps/backend-api/.env apps/backend-api/prisma/.env
+
+      - name: Generate Prisma client
+        run: pnpm --filter @omnia/backend-api prisma:generate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Deploy to home server
+        env:
+          DEPLOY_TARGET_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
+        run: scripts/deploy-home-server.sh
