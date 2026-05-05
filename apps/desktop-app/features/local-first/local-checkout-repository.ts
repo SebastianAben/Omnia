@@ -40,6 +40,32 @@ export type LocalSyncQueueRecord = {
   lastErrorMessage?: string;
 };
 
+export type LocalInventoryBalanceRecord = {
+  id: string;
+  branchId: string;
+  productId: string;
+  quantity: number;
+  minimumQuantity: number;
+  updatedAt: string;
+};
+
+export type LocalStockMovementRecord = {
+  id: string;
+  branchId: string;
+  productId: string;
+  sourceType: string;
+  sourceId?: string;
+  movementType: string;
+  quantityDelta: number;
+  quantityBefore?: number;
+  quantityAfter?: number;
+  reasonCode: string;
+  notes?: string;
+  performedByUserId?: string;
+  occurredAt: string;
+  syncStatus: LocalTransactionRecord["syncStatus"];
+};
+
 type LocalStoreBridge = {
   saveCheckout: (input: unknown) => Promise<{
     transactionId: string;
@@ -49,10 +75,20 @@ type LocalStoreBridge = {
   }>;
   listTransactions: () => Promise<LocalTransactionRecord[]>;
   listSyncQueue: () => Promise<LocalSyncQueueRecord[]>;
-  replaySync: (input: {
-    apiBaseUrl: string;
-    token?: string;
-  }) => Promise<{ attempted: number; synced: number; failed: number }>;
+  listInventoryBalances: () => Promise<LocalInventoryBalanceRecord[]>;
+  listStockMovements: () => Promise<LocalStockMovementRecord[]>;
+  saveStockAdjustment: (input: unknown) => Promise<{
+    movementId: string;
+    eventId: string;
+    quantityBefore: number;
+    quantityAfter: number;
+  }>;
+  replaySync: (input: { apiBaseUrl: string; token?: string }) => Promise<{
+    attempted: number;
+    synced: number;
+    failed: number;
+    conflict: number;
+  }>;
   saveShiftEvent: (input: unknown) => Promise<{
     shiftId: string;
     eventId: string;
@@ -95,6 +131,32 @@ export async function listLocalTransactions() {
   >;
 }
 
+export async function listLocalInventoryBalances() {
+  return requireLocalStore().listInventoryBalances();
+}
+
+export async function listLocalStockMovements() {
+  return requireLocalStore().listStockMovements();
+}
+
+export async function saveStockAdjustmentLocally(input: {
+  branch: BranchContext;
+  user: SessionUser;
+  product: {
+    id: string;
+    sku: string;
+    name: string;
+    stockOnHand: number;
+    minimumQuantity: number;
+  };
+  movementType: "adjustment_plus" | "adjustment_minus";
+  quantity: number;
+  reasonCode: string;
+  notes?: string | null;
+}) {
+  return requireLocalStore().saveStockAdjustment(input);
+}
+
 export async function replayPendingSync(token?: string) {
   return requireLocalStore().replaySync({
     apiBaseUrl: getApiBaseUrl(),
@@ -107,6 +169,7 @@ export async function saveShiftEvent(input: {
   register: RegisterContext;
   user: SessionUser;
   action: "open" | "close";
+  shiftId?: string | null;
   openingCashAmount?: number;
   closingCashAmount?: number;
 }) {

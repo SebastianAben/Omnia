@@ -36,6 +36,7 @@ export function PosWorkspace() {
   const register = useAppState((state) => state.register);
   const user = useAppState((state) => state.user);
   const activeShiftId = useAppState((state) => state.activeShiftId);
+  const shiftStatus = useAppState((state) => state.shiftStatus);
   const setPendingSyncCount = useAppState((state) => state.setPendingSyncCount);
   const lines = useCartStore((state) => state.lines);
   const addProduct = useCartStore((state) => state.addProduct);
@@ -64,8 +65,14 @@ export function PosWorkspace() {
     [products, query],
   );
   const totals = useMemo(() => calculateCartTotals(lines), [lines]);
+  const canCheckout = shiftStatus === "open" && Boolean(activeShiftId);
 
   const handleCheckout = async () => {
+    if (!canCheckout) {
+      setCheckoutMessage("Open a shift before saving checkout.");
+      return;
+    }
+
     if (lines.length === 0) {
       setCheckoutMessage("Cart is empty.");
       return;
@@ -324,12 +331,18 @@ export function PosWorkspace() {
 
         <Button
           className="mt-4 w-full"
-          disabled={isCheckingOut}
+          disabled={isCheckingOut || !canCheckout}
           onClick={handleCheckout}
           type="button"
         >
           {isCheckingOut ? "Saving..." : "Save Checkout"}
         </Button>
+
+        {!canCheckout ? (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Open a shift before saving checkout.
+          </div>
+        ) : null}
 
         {checkoutMessage ? (
           <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
