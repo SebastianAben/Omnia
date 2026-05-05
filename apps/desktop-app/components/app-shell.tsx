@@ -6,6 +6,7 @@ import type { ComponentType, ReactNode } from "react";
 import { Badge, Button, cn } from "@omnia/ui";
 import {
   BarChart3,
+  BrainCircuit,
   Clock3,
   LayoutDashboard,
   MonitorCog,
@@ -40,6 +41,7 @@ const navByRole: Record<
   ],
   hq_admin: [
     { href: "/workspace", label: "Dashboard", icon: MonitorCog },
+    { href: "/ai", label: "AI Insights", icon: BrainCircuit },
     { href: "/integrations/shopee", label: "Shopee", icon: PlugZap },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
     { href: "/audit", label: "Audit", icon: ShieldCheck },
@@ -47,6 +49,7 @@ const navByRole: Record<
   ],
   executive: [
     { href: "/workspace", label: "Dashboard", icon: BarChart3 },
+    { href: "/ai", label: "AI Insights", icon: BrainCircuit },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
     { href: "/audit", label: "Audit", icon: ShieldCheck },
   ],

@@ -13,6 +13,7 @@
     "build": "pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
+    "smoke:mvp": "powershell -ExecutionPolicy Bypass -File ./scripts/smoke-mvp.ps1",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

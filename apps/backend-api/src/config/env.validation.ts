@@ -3,6 +3,7 @@ import { z } from "zod";
 const envSchema = z.object({
   APP_ENV: z.enum(["local", "staging", "production"]),
   PORT: z.coerce.number().int().min(1).max(65535).transform(String),
+  HOST: z.string().min(1).default("0.0.0.0"),
   PUBLIC_API_URL: z.string().url(),
   CORS_ORIGINS: z.string().min(1),
   DATABASE_URL: z.string().min(1),

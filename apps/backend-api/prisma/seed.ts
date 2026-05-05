@@ -213,103 +213,166 @@ async function main(): Promise<void> {
     },
   });
 
-  const product = await prisma.product.upsert({
-    where: { sku: "SKU-DEMO-001" },
-    update: {
-      categoryId: category.id,
-      barcode: "899000000001",
-      name: "Demo Product",
-      unit: "pcs",
-      isActive: true,
-    },
-    create: {
-      categoryId: category.id,
+  const demoProducts = [
+    {
       sku: "SKU-DEMO-001",
       barcode: "899000000001",
       name: "Demo Product",
-      unit: "pcs",
+      price: 15000,
+      mainStock: 10,
+      secondStock: 7,
+      threshold: 3,
+      shopeeSku: "SHP-SKU-DEMO-001",
     },
-  });
+    {
+      sku: "SKU-DEMO-002",
+      barcode: "899000000002",
+      name: "Iced Tea Bottle",
+      price: 12000,
+      mainStock: 2,
+      secondStock: 14,
+      threshold: 5,
+      shopeeSku: "SHP-SKU-DEMO-002",
+    },
+    {
+      sku: "SKU-DEMO-003",
+      barcode: "899000000003",
+      name: "Coffee Drip Pack",
+      price: 28000,
+      mainStock: 24,
+      secondStock: 4,
+      threshold: 6,
+      shopeeSku: "SHP-SKU-DEMO-003",
+    },
+  ];
 
-  await prisma.productVariant.upsert({
-    where: {
-      productId_variantName_variantValue: {
+  const products = [];
+  for (const item of demoProducts) {
+    const product = await prisma.product.upsert({
+      where: { sku: item.sku },
+      update: {
+        categoryId: category.id,
+        barcode: item.barcode,
+        name: item.name,
+        unit: "pcs",
+        isActive: true,
+      },
+      create: {
+        categoryId: category.id,
+        sku: item.sku,
+        barcode: item.barcode,
+        name: item.name,
+        unit: "pcs",
+      },
+    });
+    products.push({ ...item, product });
+
+    await prisma.productVariant.upsert({
+      where: {
+        productId_variantName_variantValue: {
+          productId: product.id,
+          variantName: "size",
+          variantValue: "regular",
+        },
+      },
+      update: { isActive: true },
+      create: {
         productId: product.id,
         variantName: "size",
         variantValue: "regular",
       },
-    },
-    update: { isActive: true },
-    create: {
-      productId: product.id,
-      variantName: "size",
-      variantValue: "regular",
-    },
-  });
+    });
 
-  await prisma.branchProductPrice.upsert({
-    where: {
-      branchId_productId: {
-        branchId: mainBranch.id,
-        productId: product.id,
+    for (const branch of [mainBranch, secondBranch]) {
+      await prisma.branchProductPrice.upsert({
+        where: {
+          branchId_productId: {
+            branchId: branch.id,
+            productId: product.id,
+          },
+        },
+        update: {
+          sellingPrice: item.price,
+          isActive: true,
+          updatedByUserId: cashier.id,
+        },
+        create: {
+          branchId: branch.id,
+          productId: product.id,
+          sellingPrice: item.price,
+          updatedByUserId: cashier.id,
+        },
+      });
+    }
+
+    await prisma.inventoryBalance.upsert({
+      where: {
+        branchId_productId: {
+          branchId: mainBranch.id,
+          productId: product.id,
+        },
       },
-    },
-    update: {
-      sellingPrice: 15000,
-      isActive: true,
-      updatedByUserId: cashier.id,
-    },
-    create: {
-      branchId: mainBranch.id,
-      productId: product.id,
-      sellingPrice: 15000,
-      updatedByUserId: cashier.id,
-    },
-  });
-
-  await prisma.inventoryBalance.upsert({
-    where: {
-      branchId_productId: {
-        branchId: mainBranch.id,
-        productId: product.id,
+      update: {
+        quantityOnHand: item.mainStock,
+        minimumStockThreshold: item.threshold,
       },
-    },
-    update: {
-      quantityOnHand: 10,
-      minimumStockThreshold: 3,
-    },
-    create: {
-      branchId: mainBranch.id,
-      productId: product.id,
-      quantityOnHand: 10,
-      minimumStockThreshold: 3,
-    },
-  });
-
-  const seedStockMovement = await prisma.stockMovement.findFirst({
-    where: {
-      sourceType: "seed",
-      sourceId: "initial-demo-stock",
-      branchId: mainBranch.id,
-      productId: product.id,
-    },
-  });
-  if (!seedStockMovement) {
-    await prisma.stockMovement.create({
-      data: {
+      create: {
         branchId: mainBranch.id,
         productId: product.id,
-        sourceType: "seed",
-        sourceId: "initial-demo-stock",
-        movementType: "STOCK_IN",
-        quantityDelta: 10,
-        quantityBefore: 0,
-        quantityAfter: 10,
-        reasonCode: "initial_seed",
-        performedByUserId: cashier.id,
-        syncStatus: "seeded",
+        quantityOnHand: item.mainStock,
+        minimumStockThreshold: item.threshold,
       },
     });
+
+    await prisma.inventoryBalance.upsert({
+      where: {
+        branchId_productId: {
+          branchId: secondBranch.id,
+          productId: product.id,
+        },
+      },
+      update: {
+        quantityOnHand: item.secondStock,
+        minimumStockThreshold: item.threshold,
+      },
+      create: {
+        branchId: secondBranch.id,
+        productId: product.id,
+        quantityOnHand: item.secondStock,
+        minimumStockThreshold: item.threshold,
+      },
+    });
+
+    for (const branch of [mainBranch, secondBranch]) {
+      const sourceId = `initial-demo-stock-${branch.code}-${item.sku}`;
+      const seedStockMovement = await prisma.stockMovement.findFirst({
+        where: {
+          sourceType: "seed",
+          sourceId,
+          branchId: branch.id,
+          productId: product.id,
+        },
+      });
+      if (!seedStockMovement) {
+        const stock =
+          branch.id === mainBranch.id ? item.mainStock : item.secondStock;
+        await prisma.stockMovement.create({
+          data: {
+            branchId: branch.id,
+            productId: product.id,
+            sourceType: "seed",
+            sourceId,
+            movementType: "STOCK_IN",
+            quantityDelta: stock,
+            quantityBefore: 0,
+            quantityAfter: stock,
+            reasonCode: "initial_seed",
+            performedByUserId: cashier.id,
+            syncStatus: "seeded",
+          },
+        });
+      }
+    }
   }
 
   await prisma.salesChannel.upsert({
@@ -354,26 +417,28 @@ async function main(): Promise<void> {
     },
   });
 
-  await prisma.productChannelMapping.upsert({
-    where: {
-      channelStoreId_externalSku: {
-        channelStoreId: shopeeStore.id,
-        externalSku: "SHP-SKU-DEMO-001",
+  for (const item of products) {
+    await prisma.productChannelMapping.upsert({
+      where: {
+        channelStoreId_externalSku: {
+          channelStoreId: shopeeStore.id,
+          externalSku: item.shopeeSku,
+        },
       },
-    },
-    update: {
-      productId: product.id,
-      externalProductId: "SHP-PROD-DEMO-001",
-      mappingStatus: "mapped",
-    },
-    create: {
-      channelStoreId: shopeeStore.id,
-      productId: product.id,
-      externalProductId: "SHP-PROD-DEMO-001",
-      externalSku: "SHP-SKU-DEMO-001",
-      mappingStatus: "mapped",
-    },
-  });
+      update: {
+        productId: item.product.id,
+        externalProductId: item.shopeeSku.replace("SHP-SKU", "SHP-PROD"),
+        mappingStatus: "mapped",
+      },
+      create: {
+        channelStoreId: shopeeStore.id,
+        productId: item.product.id,
+        externalProductId: item.shopeeSku.replace("SHP-SKU", "SHP-PROD"),
+        externalSku: item.shopeeSku,
+        mappingStatus: "mapped",
+      },
+    });
+  }
 
   await prisma.shift.upsert({
     where: { id: "shift-demo-open" },
@@ -390,6 +455,103 @@ async function main(): Promise<void> {
       openedByUserId: cashier.id,
       openingCashAmount: 200000,
       status: "OPEN",
+    },
+  });
+
+  await prisma.salesTransaction.upsert({
+    where: { transactionNo: "DEMO-RC-0001" },
+    update: {
+      branchId: mainBranch.id,
+      registerId: register.id,
+      cashierUserId: cashier.id,
+      subtotalAmount: 39000,
+      totalAmount: 39000,
+      paymentStatus: "PAID",
+      transactionStatus: "COMPLETED",
+      sourceMode: "OFFLINE_REPLAY",
+      syncedAt: new Date(),
+    },
+    create: {
+      id: "txn-demo-rc-0001",
+      transactionNo: "DEMO-RC-0001",
+      branchId: mainBranch.id,
+      registerId: register.id,
+      shiftId: "shift-demo-open",
+      cashierUserId: cashier.id,
+      transactionDatetime: new Date(Date.now() - 1000 * 60 * 60 * 4),
+      subtotalAmount: 39000,
+      totalAmount: 39000,
+      paymentStatus: "PAID",
+      transactionStatus: "COMPLETED",
+      sourceMode: "OFFLINE_REPLAY",
+      localReferenceId: "local-demo-rc-0001",
+      syncedAt: new Date(),
+      items: {
+        create: [
+          {
+            id: "txn-demo-rc-0001-item-1",
+            productId: products[0].product.id,
+            productNameSnapshot: products[0].name,
+            skuSnapshot: products[0].sku,
+            unitPrice: products[0].price,
+            quantity: 1,
+            lineTotal: products[0].price,
+          },
+          {
+            id: "txn-demo-rc-0001-item-2",
+            productId: products[1].product.id,
+            productNameSnapshot: products[1].name,
+            skuSnapshot: products[1].sku,
+            unitPrice: products[1].price,
+            quantity: 2,
+            lineTotal: products[1].price * 2,
+          },
+        ],
+      },
+      payments: {
+        create: {
+          id: "txn-demo-rc-0001-payment-1",
+          paymentMethodCode: "cash",
+          amount: 39000,
+          paymentStatus: "PAID",
+          paidAt: new Date(Date.now() - 1000 * 60 * 60 * 4),
+        },
+      },
+    },
+  });
+
+  await prisma.aiInsight.upsert({
+    where: { id: "ai-demo-low-stock-001" },
+    update: {
+      branchId: mainBranch.id,
+      productId: products[1].product.id,
+      title: "Iced Tea Bottle is below threshold",
+      summary:
+        "Demo Branch has 2 units on hand against a threshold of 5. Review replenishment before the next sales peak.",
+      severity: "warning",
+      confidenceScore: 0.82,
+      referenceData: {
+        quantity_on_hand: 2,
+        minimum_stock_threshold: 5,
+        advisory_only: true,
+      },
+      generatedAt: new Date(),
+    },
+    create: {
+      id: "ai-demo-low-stock-001",
+      branchId: mainBranch.id,
+      productId: products[1].product.id,
+      insightType: "low_stock_alert",
+      title: "Iced Tea Bottle is below threshold",
+      summary:
+        "Demo Branch has 2 units on hand against a threshold of 5. Review replenishment before the next sales peak.",
+      severity: "warning",
+      confidenceScore: 0.82,
+      referenceData: {
+        quantity_on_hand: 2,
+        minimum_stock_threshold: 5,
+        advisory_only: true,
+      },
     },
   });
 }

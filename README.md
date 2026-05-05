@@ -85,8 +85,19 @@ pnpm dev
 - `pnpm build`
 - `pnpm lint`
 - `pnpm typecheck`
+- `pnpm smoke:mvp`
 - `pnpm format`
 - `pnpm format:check`
+
+## MVP Release Candidate Checks
+
+Setelah setup lokal, migration, seed, dan backend berjalan, validasi smoke Sprint 7 dapat dijalankan dengan:
+
+```bash
+pnpm smoke:mvp
+```
+
+Smoke check ini memvalidasi health, login role utama, master data, sync bundle + idempotency, central dashboard, Shopee integration health, dan AI insights. Detail UAT, permission review, branch scoping, audit coverage, dan known issues ada di [Sprint 7 MVP Release Readiness](docs/Sprint-7-MVP-Release-Readiness.md). Backlog ekspansi setelah MVP ada di [Sprint 8 Post-MVP Expansion Backlog](docs/Sprint-8-Post-MVP-Expansion-Backlog.md).
 
 ## CI/CD Home Server
 

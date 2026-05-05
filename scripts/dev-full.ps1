@@ -1,5 +1,6 @@
 param(
-  [switch] $SkipStart
+  [switch] $SkipStart,
+  [switch] $ForceInstall
 )
 
 $ErrorActionPreference = "Stop"
@@ -145,8 +146,12 @@ Set-EnvValueIfBlank "apps/backend-api/.env" "REFRESH_TOKEN_SECRET" "replace-with
 Import-EnvFile ".env.local"
 Import-EnvFile "apps/backend-api/.env"
 
-Write-Host "Installing dependencies..."
-Invoke-Native "pnpm" "install"
+if ($ForceInstall -or -not (Test-Path "node_modules")) {
+  Write-Host "Installing dependencies..."
+  Invoke-Native "pnpm" "install"
+} else {
+  Write-Host "Dependencies already installed; skipping pnpm install. Use -ForceInstall to reinstall."
+}
 
 Write-Host "Starting local infrastructure..."
 Invoke-Native "docker" "compose" "up" "-d" "postgres" "redis"
@@ -154,7 +159,9 @@ Wait-ForHealthyContainer "omnia-postgres"
 Wait-ForHealthyContainer "omnia-redis"
 
 Write-Host "Preparing Prisma client and central database..."
-Invoke-Native "pnpm" "--filter" "@omnia/backend-api" "exec" "prisma" "generate" "--schema" "prisma/schema.prisma"
+Get-ChildItem -Path "node_modules/.pnpm" -Recurse -Filter "query_engine-windows.dll.node.tmp*" -ErrorAction SilentlyContinue |
+  Remove-Item -Force -ErrorAction SilentlyContinue
+Invoke-Native "pnpm" "--filter" "@omnia/backend-api" "prisma:generate"
 Invoke-Native "pnpm" "--filter" "@omnia/backend-api" "exec" "prisma" "migrate" "deploy" "--schema" "prisma/schema.prisma"
 Invoke-Native "pnpm" "--filter" "@omnia/backend-api" "prisma:seed"
 

@@ -14,6 +14,8 @@ async function bootstrap(): Promise<void> {
 
   const config = app.get(appConfig.KEY);
   const logger = new Logger("Bootstrap");
+  const localAllowedOriginPattern =
+    /^http:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}):30\d{2}$/;
 
   app.setGlobalPrefix("api/v1");
   app.useGlobalPipes(
@@ -33,9 +35,7 @@ async function bootstrap(): Promise<void> {
         !origin ||
         config.corsOrigins.includes(origin) ||
         (config.appEnv === "local" &&
-          /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}):3000$/.test(
-            origin,
-          ))
+          localAllowedOriginPattern.test(origin))
       ) {
         callback(null, true);
         return;
@@ -55,8 +55,8 @@ async function bootstrap(): Promise<void> {
   const document = SwaggerModule.createDocument(app, openApiConfig);
   SwaggerModule.setup("api/v1/docs", app, document);
 
-  await app.listen(config.port);
-  logger.log(`backend-api listening on port ${config.port}`);
+  await app.listen(config.port, config.host);
+  logger.log(`backend-api listening on ${config.host}:${config.port}`);
 }
 
 void bootstrap();

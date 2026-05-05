@@ -77,19 +77,27 @@ export const roleFromApi = (roleCode: string): OmniaRole => {
   return "cashier";
 };
 
-const defaultBranch: BranchContext = {
+export const defaultBranch: BranchContext = {
   id: "br_demo",
   code: "BR-DEMO",
   name: "Branch A",
 };
 
-const defaultUser: SessionUser = {
+export const defaultUser: SessionUser = {
   id: "usr_demo_cashier",
   fullName: "Demo Cashier",
   username: "demo.cashier",
   role: "cashier",
   branchId: defaultBranch.id,
 };
+
+export const createDemoSession = (role: OmniaRole = "cashier") => ({
+  user: {
+    ...defaultUser,
+    role,
+  },
+  branch: defaultBranch,
+});
 
 export const useAppState = create<AppStore>()(
   subscribeWithSelector((set) => ({
