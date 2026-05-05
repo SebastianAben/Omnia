@@ -1,4 +1,4 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("omniaDesktop", {
   platform: process.platform,
@@ -6,5 +6,16 @@ contextBridge.exposeInMainWorld("omniaDesktop", {
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     node: process.versions.node,
+  },
+  localStore: {
+    saveCheckout: (input: unknown) =>
+      ipcRenderer.invoke("omnia:local-store:save-checkout", input),
+    listTransactions: () =>
+      ipcRenderer.invoke("omnia:local-store:list-transactions"),
+    listSyncQueue: () => ipcRenderer.invoke("omnia:local-store:list-sync-queue"),
+    replaySync: (input: unknown) =>
+      ipcRenderer.invoke("omnia:local-store:replay-sync", input),
+    saveShiftEvent: (input: unknown) =>
+      ipcRenderer.invoke("omnia:local-store:save-shift-event", input),
   },
 });

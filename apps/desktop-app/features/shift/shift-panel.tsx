@@ -1,19 +1,63 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button, Badge } from "@omnia/ui";
 
 import { WorkspacePanel } from "@/components/app-shell";
 import { useAppState } from "@/lib/app-state";
-import { listLocalSyncQueue } from "@/features/local-first/local-checkout-repository";
+import {
+  listLocalSyncQueue,
+  saveShiftEvent,
+} from "@/features/local-first/local-checkout-repository";
 
 export function ShiftPanel() {
   const shiftStatus = useAppState((state) => state.shiftStatus);
   const setShiftStatus = useAppState((state) => state.setShiftStatus);
+  const setActiveShiftId = useAppState((state) => state.setActiveShiftId);
   const branch = useAppState((state) => state.branch);
   const register = useAppState((state) => state.register);
-  const pendingCount = listLocalSyncQueue().filter((item) =>
-    ["pending", "queued"].includes(item.status),
-  ).length;
+  const user = useAppState((state) => state.user);
+  const [openingCashAmount, setOpeningCashAmount] = useState(100000);
+  const [closingCashAmount, setClosingCashAmount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    void refreshPendingCount();
+  }, []);
+
+  const refreshPendingCount = async () => {
+    const queue = await listLocalSyncQueue();
+    setPendingCount(
+      queue.filter((item) => ["pending", "queued"].includes(item.status))
+        .length,
+    );
+  };
+
+  const handleOpenShift = async () => {
+    const result = await saveShiftEvent({
+      branch,
+      register,
+      user,
+      action: "open",
+      openingCashAmount,
+    });
+    setActiveShiftId(result.shiftId);
+    setShiftStatus("open");
+    await refreshPendingCount();
+  };
+
+  const handleCloseShift = async () => {
+    await saveShiftEvent({
+      branch,
+      register,
+      user,
+      action: "close",
+      closingCashAmount,
+    });
+    setActiveShiftId(undefined);
+    setShiftStatus("closed");
+    await refreshPendingCount();
+  };
 
   return (
     <WorkspacePanel
@@ -42,16 +86,22 @@ export function ShiftPanel() {
               Opening cash
               <input
                 className="h-10 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                defaultValue={100000}
+                onChange={(event) =>
+                  setOpeningCashAmount(Number(event.target.value || 0))
+                }
                 type="number"
+                value={openingCashAmount}
               />
             </label>
             <label className="grid gap-2 text-sm font-medium text-slate-700">
               Closing cash
               <input
                 className="h-10 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                defaultValue={0}
+                onChange={(event) =>
+                  setClosingCashAmount(Number(event.target.value || 0))
+                }
                 type="number"
+                value={closingCashAmount}
               />
             </label>
           </div>
@@ -59,14 +109,14 @@ export function ShiftPanel() {
           <div className="mt-5 flex flex-wrap gap-2">
             <Button
               disabled={shiftStatus === "open"}
-              onClick={() => setShiftStatus("open")}
+              onClick={handleOpenShift}
               type="button"
             >
               Open Shift
             </Button>
             <Button
               disabled={shiftStatus === "closed"}
-              onClick={() => setShiftStatus("closed")}
+              onClick={handleCloseShift}
               type="button"
               variant="secondary"
             >

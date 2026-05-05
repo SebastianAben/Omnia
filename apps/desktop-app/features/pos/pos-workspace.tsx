@@ -31,9 +31,11 @@ const paymentStatusOptions: Array<{ value: PaymentStatus; label: string }> = [
 export function PosWorkspace() {
   const [query, setQuery] = useState("");
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
+  const [isCheckingOut, setCheckingOut] = useState(false);
   const branch = useAppState((state) => state.branch);
   const register = useAppState((state) => state.register);
   const user = useAppState((state) => state.user);
+  const activeShiftId = useAppState((state) => state.activeShiftId);
   const setPendingSyncCount = useAppState((state) => state.setPendingSyncCount);
   const lines = useCartStore((state) => state.lines);
   const addProduct = useCartStore((state) => state.addProduct);
@@ -63,27 +65,43 @@ export function PosWorkspace() {
   );
   const totals = useMemo(() => calculateCartTotals(lines), [lines]);
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (lines.length === 0) {
       setCheckoutMessage("Cart is empty.");
       return;
     }
 
-    const result = saveCheckoutLocally({
-      branch,
-      register,
-      user,
-      lines,
-      totals,
-      paymentMethod: selectedPaymentMethod,
-      paymentStatus,
-      amountReceived,
-    });
-    setPendingSyncCount(listLocalSyncQueue().length);
-    clearCart();
-    setCheckoutMessage(
-      `${result.transactionNo} saved locally and queued as ${result.eventId}.`,
-    );
+    setCheckingOut(true);
+    try {
+      const result = await saveCheckoutLocally({
+        branch,
+        register,
+        user,
+        shiftId: activeShiftId,
+        lines,
+        totals,
+        paymentMethod: selectedPaymentMethod,
+        paymentStatus,
+        amountReceived,
+      });
+      const queue = await listLocalSyncQueue();
+      setPendingSyncCount(
+        queue.filter((item) => ["pending", "queued"].includes(item.status))
+          .length,
+      );
+      clearCart();
+      setCheckoutMessage(
+        `${result.transactionNo} saved to SQLite and queued as ${result.eventId}.`,
+      );
+    } catch (error) {
+      setCheckoutMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to save checkout locally.",
+      );
+    } finally {
+      setCheckingOut(false);
+    }
   };
 
   return (
@@ -304,8 +322,13 @@ export function PosWorkspace() {
           </span>
         </div>
 
-        <Button className="mt-4 w-full" onClick={handleCheckout} type="button">
-          Save Checkout
+        <Button
+          className="mt-4 w-full"
+          disabled={isCheckingOut}
+          onClick={handleCheckout}
+          type="button"
+        >
+          {isCheckingOut ? "Saving..." : "Save Checkout"}
         </Button>
 
         {checkoutMessage ? (

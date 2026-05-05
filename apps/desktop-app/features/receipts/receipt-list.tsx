@@ -1,13 +1,25 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Badge } from "@omnia/ui";
 
 import { WorkspacePanel } from "@/components/app-shell";
-import { listLocalTransactions } from "@/features/local-first/local-checkout-repository";
+import {
+  listLocalTransactions,
+  type LocalTransactionRecord,
+} from "@/features/local-first/local-checkout-repository";
 import { formatRupiah } from "@/features/pos/pos-utils";
 
 export function ReceiptList() {
-  const transactions = listLocalTransactions();
+  const [transactions, setTransactions] = useState<LocalTransactionRecord[]>(
+    [],
+  );
+
+  useEffect(() => {
+    void listLocalTransactions().then(setTransactions).catch(() => {
+      setTransactions([]);
+    });
+  }, []);
 
   return (
     <WorkspacePanel
@@ -36,7 +48,18 @@ export function ReceiptList() {
                     {transaction.paymentMethod.toUpperCase()}
                   </div>
                 </div>
-                <Badge tone="warning">Pending sync</Badge>
+                <Badge
+                  tone={
+                    transaction.syncStatus === "synced"
+                      ? "success"
+                      : transaction.syncStatus === "failed" ||
+                          transaction.syncStatus === "conflict"
+                        ? "danger"
+                        : "warning"
+                  }
+                >
+                  {transaction.syncStatus}
+                </Badge>
               </div>
 
               <div className="mt-4 grid gap-2 text-sm">

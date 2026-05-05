@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Badge } from "@omnia/ui";
 import {
   Clock,
@@ -18,11 +19,20 @@ export function BranchWorkspace() {
   const branch = useAppState((state) => state.branch);
   const shiftStatus = useAppState((state) => state.shiftStatus);
   const pendingSyncCount = useAppState((state) => state.pendingSyncCount);
-  const transactions = listLocalTransactions();
-  const salesToday = transactions.reduce(
-    (total, transaction) => total + transaction.totals.grandTotal,
-    0,
-  );
+  const [salesToday, setSalesToday] = useState(0);
+
+  useEffect(() => {
+    void listLocalTransactions()
+      .then((transactions) => {
+        setSalesToday(
+          transactions.reduce(
+            (total, transaction) => total + transaction.totals.grandTotal,
+            0,
+          ),
+        );
+      })
+      .catch(() => setSalesToday(0));
+  }, []);
 
   return (
     <WorkspacePanel

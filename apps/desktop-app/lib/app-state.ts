@@ -31,6 +31,7 @@ export interface AppState {
   register: RegisterContext;
   user: SessionUser;
   token?: string;
+  activeShiftId?: string;
   shiftStatus: ShiftStatus;
   isOnline: boolean;
   pendingSyncCount: number;
@@ -41,6 +42,7 @@ export interface AppActions {
   setOnline: (isOnline: boolean) => void;
   setPendingSyncCount: (pendingSyncCount: number) => void;
   setShiftStatus: (shiftStatus: ShiftStatus) => void;
+  setActiveShiftId: (activeShiftId?: string) => void;
   setSession: (session: {
     token?: string;
     user: SessionUser;
@@ -99,6 +101,7 @@ export const useAppState = create<AppStore>()(
     },
     user: defaultUser,
     token: undefined,
+    activeShiftId: undefined,
     shiftStatus: "open",
     isOnline: true,
     pendingSyncCount: 0,
@@ -113,6 +116,7 @@ export const useAppState = create<AppStore>()(
     setOnline: (isOnline) => set({ isOnline }),
     setPendingSyncCount: (pendingSyncCount) => set({ pendingSyncCount }),
     setShiftStatus: (shiftStatus) => set({ shiftStatus }),
+    setActiveShiftId: (activeShiftId) => set({ activeShiftId }),
     setSession: ({ token, user, branch }) =>
       set((state) => ({
         token,
