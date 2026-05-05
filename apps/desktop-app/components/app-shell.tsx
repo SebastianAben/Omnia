@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   MonitorCog,
   PackageSearch,
+  PlugZap,
   ReceiptText,
   ScrollText,
   RefreshCcw,
@@ -39,6 +40,7 @@ const navByRole: Record<
   ],
   hq_admin: [
     { href: "/workspace", label: "Dashboard", icon: MonitorCog },
+    { href: "/integrations/shopee", label: "Shopee", icon: PlugZap },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
     { href: "/audit", label: "Audit", icon: ShieldCheck },
     { href: "/pos", label: "POS Preview", icon: ReceiptText },

@@ -2,11 +2,15 @@ import { Inject, Injectable } from "@nestjs/common";
 import { SyncJobStatus } from "@prisma/client";
 
 import { ok } from "../common/http";
+import { ShopeeService } from "../integrations/shopee/shopee.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class MonitoringService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ShopeeService) private readonly shopeeService: ShopeeService,
+  ) {}
 
   async branchSyncHealth(filters: { branch_id?: string }) {
     const branches = await this.prisma.branch.findMany({
@@ -78,5 +82,8 @@ export class MonitoringService {
 
     return ok(rows);
   }
-}
 
+  async shopeeIntegrationHealth() {
+    return this.shopeeService.monitoringSnapshot();
+  }
+}

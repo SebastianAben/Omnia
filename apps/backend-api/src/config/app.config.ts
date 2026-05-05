@@ -22,6 +22,9 @@ export const appConfig = registerAs("app", () => {
     jwtSecret: env.JWT_SECRET,
     jwtExpiresIn: env.JWT_EXPIRES_IN,
     refreshTokenSecret: env.REFRESH_TOKEN_SECRET,
+    shopeeWebhookSecret: env.SHOPEE_WEBHOOK_SECRET,
+    shopeeMockMode: env.SHOPEE_MOCK_MODE === "true",
+    shopeeWebhookMaxSkewSeconds: Number(env.SHOPEE_WEBHOOK_MAX_SKEW_SECONDS),
     logLevel: env.LOG_LEVEL,
     version: process.env.npm_package_version ?? "0.1.0",
   };

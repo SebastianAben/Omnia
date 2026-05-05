@@ -9,6 +9,7 @@
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.seed.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.seed.json --noEmit",
     "db:migrate:local": "psql ${DATABASE_URL:-postgresql://omnia:omnia@localhost:55433/omnia} -f prisma/migrations/20260505023000_init/migration.sql",
+    "db:migrate:sprint5": "psql ${DATABASE_URL:-postgresql://omnia:omnia@localhost:55433/omnia} -f prisma/migrations/20260505090000_sprint5_shopee_integration/migration.sql",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",

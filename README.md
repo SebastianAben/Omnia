@@ -4,9 +4,9 @@ Omnia adalah Hybrid Omnichannel Smart POS untuk retail dan UMKM multi-cabang. MV
 
 ## Implementation Status
 
-Sprint 0 foundation sudah selesai dan repo sudah mulai masuk parsial ke fitur MVP awal. Fondasi monorepo, desktop app shell, backend API, database, auth demo, sync foundation, seed data, CI/CD, dan deployment/env contract sudah tersedia.
+Sprint 0 foundation sudah selesai dan repo sudah masuk fitur MVP awal. Fondasi monorepo, desktop app shell, backend API, database, auth demo, sync foundation, seed data, CI/CD, deployment/env contract, dashboard dasar, dan Shopee mock-first integration sudah tersedia.
 
-Fitur yang sudah mulai berjalan meliputi POS checkout local-first ke SQLite, shift dasar, inventory adjustment MVP, receipt preview, sync status/replay transaksi, shift, dan stock movement, backend apply `transaction.bundle`, `shift.opened`/`shift.closed`, serta `stock_movement.created` ke central DB. Fitur yang masih belum final: UI Figma/pixel-perfect, auth production-grade, dashboard/reporting, Shopee integration, dan AI insights.
+Fitur yang sudah mulai berjalan meliputi POS checkout local-first ke SQLite, shift dasar, inventory adjustment MVP, receipt preview, sync status/replay transaksi, shift, dan stock movement, backend apply `transaction.bundle`, `shift.opened`/`shift.closed`, `stock_movement.created`, dashboard/reporting/audit, serta Shopee store/mapping/webhook/order import mock-first. Fitur yang masih belum final: UI Figma/pixel-perfect, auth production-grade, real Shopee OAuth/sandbox, outbound stock sync nyata, dan AI insights.
 
 ## Struktur Repo
 
@@ -68,6 +68,7 @@ docker compose up -d postgres redis
 
 ```bash
 pnpm --filter @omnia/backend-api db:migrate:local
+pnpm --filter @omnia/backend-api db:migrate:sprint5 # only needed for an existing DB created before Sprint 5
 pnpm --filter @omnia/backend-api prisma:seed
 pnpm --filter @omnia/desktop-app localdb:init
 ```
@@ -185,6 +186,11 @@ Key values:
 - `DATABASE_URL` for PostgreSQL
 - `REDIS_URL` for Redis/BullMQ
 - `PUBLIC_API_URL` for backend public URL
+- `SHOPEE_WEBHOOK_SECRET` for mock Shopee webhook validation
+- `SHOPEE_MOCK_MODE=true` for Sprint 5 mock-first behavior
+- `SHOPEE_WEBHOOK_MAX_SKEW_SECONDS` for optional webhook timestamp skew validation
+
+Sprint 5 Shopee webhook smoke payload can be posted to `POST /api/v1/webhooks/shopee/orders` with header `x-shopee-webhook-secret: <SHOPEE_WEBHOOK_SECRET>`. Real Shopee OAuth/signature and outbound stock sync are intentionally outside the current mock-first scope.
 
 See [Deployment Strategy](docs/Deployment-Strategy-Hybrid-Omnichannel-Smart-POS.md).
 

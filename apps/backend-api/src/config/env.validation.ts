@@ -13,6 +13,22 @@ const envSchema = z.object({
   SHOPEE_CLIENT_ID: z.string().optional(),
   SHOPEE_CLIENT_SECRET: z.string().optional(),
   SHOPEE_REDIRECT_URI: z.string().url().optional().or(z.literal("")),
+  SHOPEE_WEBHOOK_SECRET: z
+    .string()
+    .min(1)
+    .default("local-shopee-webhook-secret"),
+  SHOPEE_MOCK_MODE: z
+    .enum(["true", "false"])
+    .default("true")
+    .refine((value) => value === "true", {
+      message: "must be true for mock-first Shopee integration",
+    }),
+  SHOPEE_WEBHOOK_MAX_SKEW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(300)
+    .transform(String),
   SENTRY_DSN: z.string().url().optional().or(z.literal("")),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]),
 });

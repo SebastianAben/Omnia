@@ -75,28 +75,29 @@ model Role {
 }
 
 model User {
-  id             String               @id @default(uuid())
-  roleId         String               @map("role_id")
-  branchId       String?              @map("branch_id")
-  fullName       String               @map("full_name")
-  username       String               @unique
-  email          String?              @unique
-  passwordHash   String               @map("password_hash")
-  pinHash        String?              @map("pin_hash")
-  isActive       Boolean              @default(true) @map("is_active")
-  lastLoginAt    DateTime?            @map("last_login_at")
-  createdAt      DateTime             @default(now()) @map("created_at")
-  updatedAt      DateTime             @updatedAt @map("updated_at")
-  role           Role                 @relation(fields: [roleId], references: [id])
-  branch         Branch?              @relation(fields: [branchId], references: [id])
-  openedShifts   Shift[]              @relation("OpenedShifts")
-  closedShifts   Shift[]              @relation("ClosedShifts")
-  priceUpdates   BranchProductPrice[] @relation("PriceUpdatedBy")
-  stockMovements StockMovement[]      @relation("StockMovementActor")
-  transactions   SalesTransaction[]
-  syncJobs       SyncJob[]
-  syncLogs       SyncLog[]
-  auditLogs      AuditLog[]
+  id              String                  @id @default(uuid())
+  roleId          String                  @map("role_id")
+  branchId        String?                 @map("branch_id")
+  fullName        String                  @map("full_name")
+  username        String                  @unique
+  email           String?                 @unique
+  passwordHash    String                  @map("password_hash")
+  pinHash         String?                 @map("pin_hash")
+  isActive        Boolean                 @default(true) @map("is_active")
+  lastLoginAt     DateTime?               @map("last_login_at")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  role            Role                    @relation(fields: [roleId], references: [id])
+  branch          Branch?                 @relation(fields: [branchId], references: [id])
+  openedShifts    Shift[]                 @relation("OpenedShifts")
+  closedShifts    Shift[]                 @relation("ClosedShifts")
+  priceUpdates    BranchProductPrice[]    @relation("PriceUpdatedBy")
+  stockMovements  StockMovement[]         @relation("StockMovementActor")
+  transactions    SalesTransaction[]
+  syncJobs        SyncJob[]
+  syncLogs        SyncLog[]
+  auditLogs       AuditLog[]
+  channelMappings ProductChannelMapping[] @relation("ProductChannelMappingCreator")
 
   @@index([roleId])
   @@index([branchId])
@@ -123,6 +124,7 @@ model Branch {
   syncJobs          SyncJob[]
   syncLogs          SyncLog[]
   auditLogs         AuditLog[]
+  onlineOrders      OnlineOrder[]
 
   @@map("branches")
 }
@@ -161,22 +163,24 @@ model Category {
 }
 
 model Product {
-  id                String                 @id @default(uuid())
-  categoryId        String?                @map("category_id")
-  sku               String                 @unique
-  barcode           String?                @unique
+  id                String                  @id @default(uuid())
+  categoryId        String?                 @map("category_id")
+  sku               String                  @unique
+  barcode           String?                 @unique
   name              String
   description       String?
-  unit              String                 @default("pcs")
-  isActive          Boolean                @default(true) @map("is_active")
-  createdAt         DateTime               @default(now()) @map("created_at")
-  updatedAt         DateTime               @updatedAt @map("updated_at")
-  category          Category?              @relation(fields: [categoryId], references: [id])
+  unit              String                  @default("pcs")
+  isActive          Boolean                 @default(true) @map("is_active")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  category          Category?               @relation(fields: [categoryId], references: [id])
   variants          ProductVariant[]
   prices            BranchProductPrice[]
   inventoryBalances InventoryBalance[]
   stockMovements    StockMovement[]
   transactionItems  SalesTransactionItem[]
+  channelMappings   ProductChannelMapping[]
+  onlineOrderItems  OnlineOrderItem[]
 
   @@index([categoryId])
   @@index([name])
@@ -347,15 +351,184 @@ model Payment {
 }
 
 model SalesChannel {
-  id        String   @id @default(uuid())
-  code      String   @unique
+  id        String         @id @default(uuid())
+  code      String         @unique
   name      String
   type      String
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  isActive  Boolean        @default(true) @map("is_active")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  stores    ChannelStore[]
+  orders    OnlineOrder[]
 
   @@map("sales_channels")
+}
+
+model ChannelStore {
+  id                  String                  @id @default(uuid())
+  salesChannelId      String                  @map("sales_channel_id")
+  storeName           String                  @map("store_name")
+  externalStoreId     String                  @map("external_store_id")
+  authStatus          String                  @default("connected") @map("auth_status")
+  credentialReference String?                 @map("credential_reference")
+  authPayload         Json?                   @map("auth_payload")
+  isActive            Boolean                 @default(true) @map("is_active")
+  connectedAt         DateTime?               @map("connected_at")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  salesChannel        SalesChannel            @relation(fields: [salesChannelId], references: [id])
+  productMappings     ProductChannelMapping[]
+  onlineOrders        OnlineOrder[]
+
+  @@unique([salesChannelId, externalStoreId])
+  @@index([salesChannelId, isActive])
+  @@map("channel_stores")
+}
+
+model ProductChannelMapping {
+  id                String       @id @default(uuid())
+  channelStoreId    String       @map("channel_store_id")
+  productId         String       @map("product_id")
+  externalProductId String?      @map("external_product_id")
+  externalSku       String       @map("external_sku")
+  mappingStatus     String       @default("mapped") @map("mapping_status")
+  createdByUserId   String?      @map("created_by_user_id")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  channelStore      ChannelStore @relation(fields: [channelStoreId], references: [id], onDelete: Cascade)
+  product           Product      @relation(fields: [productId], references: [id])
+  createdBy         User?        @relation("ProductChannelMappingCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([channelStoreId, externalSku])
+  @@index([productId])
+  @@index([channelStoreId, mappingStatus])
+  @@map("product_channel_mappings")
+}
+
+model OnlineOrder {
+  id              String            @id @default(uuid())
+  salesChannelId  String            @map("sales_channel_id")
+  channelStoreId  String            @map("channel_store_id")
+  externalOrderId String            @map("external_order_id")
+  branchId        String?           @map("branch_id")
+  orderDatetime   DateTime          @map("order_datetime")
+  orderStatus     String            @map("order_status")
+  paymentStatus   String            @map("payment_status")
+  mappingStatus   String            @default("mapped") @map("mapping_status")
+  subtotalAmount  Decimal           @default(0) @map("subtotal_amount") @db.Decimal(14, 2)
+  discountAmount  Decimal           @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  shippingAmount  Decimal           @default(0) @map("shipping_amount") @db.Decimal(14, 2)
+  totalAmount     Decimal           @default(0) @map("total_amount") @db.Decimal(14, 2)
+  rawPayload      Json              @map("raw_payload")
+  importedAt      DateTime          @default(now()) @map("imported_at")
+  processedAt     DateTime?         @map("processed_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  salesChannel    SalesChannel      @relation(fields: [salesChannelId], references: [id])
+  channelStore    ChannelStore      @relation(fields: [channelStoreId], references: [id])
+  branch          Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  items           OnlineOrderItem[]
+  integrationJobs IntegrationJob[]
+  integrationLogs IntegrationLog[]
+
+  @@unique([channelStoreId, externalOrderId])
+  @@index([salesChannelId, orderDatetime])
+  @@index([branchId, orderDatetime])
+  @@index([orderStatus, paymentStatus])
+  @@index([mappingStatus])
+  @@map("online_orders")
+}
+
+model OnlineOrderItem {
+  id                  String      @id @default(uuid())
+  onlineOrderId       String      @map("online_order_id")
+  productId           String?     @map("product_id")
+  externalProductId   String?     @map("external_product_id")
+  externalSku         String?     @map("external_sku")
+  productNameSnapshot String      @map("product_name_snapshot")
+  unitPrice           Decimal     @default(0) @map("unit_price") @db.Decimal(14, 2)
+  quantity            Decimal     @default(0) @db.Decimal(14, 2)
+  lineTotal           Decimal     @default(0) @map("line_total") @db.Decimal(14, 2)
+  mappingStatus       String      @default("mapped") @map("mapping_status")
+  rawPayload          Json?       @map("raw_payload")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  onlineOrder         OnlineOrder @relation(fields: [onlineOrderId], references: [id], onDelete: Cascade)
+  product             Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([onlineOrderId])
+  @@index([productId])
+  @@index([externalSku])
+  @@index([mappingStatus])
+  @@map("online_order_items")
+}
+
+model WebhookEvent {
+  id               String          @id @default(uuid())
+  provider         String
+  eventReference   String          @map("event_reference")
+  eventType        String          @map("event_type")
+  externalOrderId  String          @map("external_order_id")
+  channelStoreId   String?         @map("channel_store_id")
+  status           String          @default("received")
+  rawPayload       Json            @map("raw_payload")
+  receivedAt       DateTime        @default(now()) @map("received_at")
+  processedAt      DateTime?       @map("processed_at")
+  integrationJobId String?         @map("integration_job_id")
+  integrationJob   IntegrationJob? @relation(fields: [integrationJobId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalOrderId, eventReference])
+  @@index([provider, status])
+  @@index([channelStoreId])
+  @@index([integrationJobId])
+  @@map("webhook_events")
+}
+
+model IntegrationJob {
+  id              String           @id @default(uuid())
+  provider        String
+  jobType         String           @map("job_type")
+  status          String           @default("pending")
+  attemptCount    Int              @default(0) @map("attempt_count")
+  payload         Json
+  onlineOrderId   String?          @map("online_order_id")
+  lastAttemptAt   DateTime?        @map("last_attempt_at")
+  nextRetryAt     DateTime?        @map("next_retry_at")
+  errorCode       String?          @map("error_code")
+  errorMessage    String?          @map("error_message")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  onlineOrder     OnlineOrder?     @relation(fields: [onlineOrderId], references: [id], onDelete: SetNull)
+  webhookEvents   WebhookEvent[]
+  integrationLogs IntegrationLog[]
+
+  @@index([provider, status])
+  @@index([jobType, status])
+  @@index([onlineOrderId])
+  @@map("integration_jobs")
+}
+
+model IntegrationLog {
+  id               String          @id @default(uuid())
+  integrationJobId String?         @map("integration_job_id")
+  provider         String
+  logLevel         String          @default("info") @map("log_level")
+  eventType        String?         @map("event_type")
+  status           String
+  message          String?
+  errorCode        String?         @map("error_code")
+  errorMessage     String?         @map("error_message")
+  onlineOrderId    String?         @map("online_order_id")
+  payload          Json?
+  createdAt        DateTime        @default(now()) @map("created_at")
+  integrationJob   IntegrationJob? @relation(fields: [integrationJobId], references: [id], onDelete: SetNull)
+  onlineOrder      OnlineOrder?    @relation(fields: [onlineOrderId], references: [id], onDelete: SetNull)
+
+  @@index([provider, createdAt])
+  @@index([logLevel])
+  @@index([status])
+  @@index([integrationJobId])
+  @@index([onlineOrderId])
+  @@map("integration_logs")
 }
 
 model SyncJob {
