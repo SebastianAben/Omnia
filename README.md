@@ -92,6 +92,7 @@ Backend deployment memakai GitHub Actions dan self-hosted runner di home server.
 - `dev` deploy ke `/home/froztbitez/web-server/omnia/dev` dengan host port `4101`
 - `main` deploy ke `/home/froztbitez/web-server/omnia/main` dengan host port `4100`
 - Compose project dipisah menjadi `omnia-dev` dan `omnia-main`
+- Backend image dipublish ke GHCR sebagai `ghcr.io/sebastianaben/omnia-backend-api`
 - Secret server disimpan di `.env.server` pada folder deployment, bukan di repo
 
 Setup awal di home server:
@@ -101,7 +102,13 @@ mkdir -p /home/froztbitez/web-server/omnia/dev
 mkdir -p /home/froztbitez/web-server/omnia/main
 ```
 
-Copy `deploy/home-server/.env.server.example` menjadi `.env.server` di masing-masing folder deployment, lalu sesuaikan `COMPOSE_PROJECT_NAME`, `BACKEND_IMAGE`, `BACKEND_HOST_PORT`, `APP_ENV`, `PUBLIC_API_URL`, `CORS_ORIGINS`, dan secret.
+Copy `deploy/home-server/.env.server.example` menjadi `.env.server` di masing-masing folder deployment, lalu sesuaikan `COMPOSE_PROJECT_NAME`, `BACKEND_IMAGE`, `BACKEND_HOST_PORT`, `APP_ENV`, `PUBLIC_API_URL`, `CORS_ORIGINS`, dan secret. Gunakan `BACKEND_IMAGE=ghcr.io/sebastianaben/omnia-backend-api:dev` untuk dev dan `BACKEND_IMAGE=ghcr.io/sebastianaben/omnia-backend-api:main` untuk main.
+
+Jika package GHCR dibuat private, login Docker satu kali di home server sebelum deploy:
+
+```bash
+docker login ghcr.io
+```
 
 Runner GitHub untuk repo `SebastianAben/Omnia` perlu dibuat satu kali dari GitHub repository settings dengan label:
 

@@ -3,18 +3,19 @@ set -euo pipefail
 
 branch="${DEPLOY_TARGET_BRANCH:-${GITHUB_REF_NAME:-$(git branch --show-current)}}"
 workspace="${GITHUB_WORKSPACE:-$(pwd)}"
+compose_file="deploy/home-server/docker-compose.server.yml"
 
 case "$branch" in
   dev)
     deploy_dir="/home/froztbitez/web-server/omnia/dev"
     compose_project="omnia-dev"
-    backend_image="omnia-backend-api:dev"
+    backend_image="ghcr.io/sebastianaben/omnia-backend-api:dev"
     health_url="http://127.0.0.1:4101/api/v1/health"
     ;;
   main)
     deploy_dir="/home/froztbitez/web-server/omnia/main"
     compose_project="omnia-main"
-    backend_image="omnia-backend-api:main"
+    backend_image="ghcr.io/sebastianaben/omnia-backend-api:main"
     health_url="http://127.0.0.1:4100/api/v1/health"
     ;;
   *)
@@ -24,22 +25,8 @@ case "$branch" in
 esac
 
 mkdir -p "$deploy_dir"
-
-rsync -a --delete \
-  --exclude ".git" \
-  --exclude ".DS_Store" \
-  --exclude "node_modules" \
-  --exclude ".pnpm-store" \
-  --exclude "apps/*/dist" \
-  --exclude "apps/*/dist-*" \
-  --exclude "apps/*/.next" \
-  --exclude "apps/*/.omnia" \
-  --exclude ".omnia" \
-  --include ".env.example" \
-  --include ".env.server.example" \
-  --exclude ".env" \
-  --exclude ".env.*" \
-  "$workspace"/ "$deploy_dir"/
+mkdir -p "$deploy_dir/deploy/home-server"
+cp "$workspace/$compose_file" "$deploy_dir/$compose_file"
 
 cd "$deploy_dir"
 
@@ -53,9 +40,19 @@ EOF
   exit 1
 fi
 
-compose=(docker compose --env-file .env.server -p "$compose_project" -f deploy/home-server/docker-compose.server.yml)
+configured_image="$(grep -E '^BACKEND_IMAGE=' .env.server | tail -1 | cut -d '=' -f 2- || true)"
+if [[ "$configured_image" != "$backend_image" ]]; then
+  cat >&2 <<EOF
+Unexpected BACKEND_IMAGE in $deploy_dir/.env.server.
+Expected: $backend_image
+Actual:   ${configured_image:-<empty>}
+EOF
+  exit 1
+fi
 
-"${compose[@]}" build backend migrate
+compose=(docker compose --env-file .env.server -p "$compose_project" -f "$compose_file")
+
+"${compose[@]}" pull backend migrate
 "${compose[@]}" up -d postgres redis
 "${compose[@]}" run --rm migrate
 "${compose[@]}" up -d backend

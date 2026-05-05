@@ -16,9 +16,6 @@ x-backend-environment: &backend-environment
 services:
   backend:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
-    build:
-      context: ../..
-      dockerfile: apps/backend-api/Dockerfile
     restart: unless-stopped
     environment:
       <<: *backend-environment
@@ -47,9 +44,6 @@ services:
 
   migrate:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
-    build:
-      context: ../..
-      dockerfile: apps/backend-api/Dockerfile
     restart: "no"
     environment:
       <<: *backend-environment
