@@ -2,10 +2,41 @@
   "name": "@omnia/desktop-app",
   "version": "0.1.0",
   "private": true,
+  "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "echo desktop-app not bootstrapped yet",
-    "build": "echo desktop-app not bootstrapped yet",
-    "lint": "echo desktop-app lint not bootstrapped yet",
-    "typecheck": "echo desktop-app typecheck not bootstrapped yet"
+    "dev": "next dev -p 3000",
+    "dev:desktop": "pnpm build:electron && concurrently -k \"next dev -p 3000\" \"wait-on http://localhost:3000 && electron .\"",
+    "build": "next build && pnpm build:electron",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "localdb:init": "mkdir -p .omnia && sqlite3 .omnia/omnia-local.db < local-store/schema.sql",
+    "start": "next start -p 3000",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit"
+  },
+  "dependencies": {
+    "@omnia/ui": "workspace:*",
+    "@tanstack/react-query": "^5.90.2",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.545.0",
+    "next": "^15.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwind-merge": "^3.3.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@eslint/eslintrc": "^3.3.1",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.2.1",
+    "electron": "^38.1.2",
+    "eslint": "^9.36.0",
+    "eslint-config-next": "^15.5.4",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.3",
+    "wait-on": "^8.0.4"
   }
 }

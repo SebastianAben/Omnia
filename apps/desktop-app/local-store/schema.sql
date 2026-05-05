@@ -1,0 +1,108 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS local_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  role_code TEXT NOT NULL,
+  branch_id TEXT,
+  token TEXT,
+  created_at TEXT NOT NULL,
+  expires_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS products_cache (
+  id TEXT PRIMARY KEY,
+  sku TEXT NOT NULL UNIQUE,
+  barcode TEXT,
+  name TEXT NOT NULL,
+  category_name TEXT,
+  unit TEXT NOT NULL DEFAULT 'pcs',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS branch_prices_cache (
+  id TEXT PRIMARY KEY,
+  branch_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  price INTEGER NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL,
+  UNIQUE (branch_id, product_id)
+);
+
+CREATE TABLE IF NOT EXISTS inventory_balances_local (
+  id TEXT PRIMARY KEY,
+  branch_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  quantity REAL NOT NULL DEFAULT 0,
+  minimum_quantity REAL NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  UNIQUE (branch_id, product_id)
+);
+
+CREATE TABLE IF NOT EXISTS stock_movements_local (
+  id TEXT PRIMARY KEY,
+  branch_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  movement_type TEXT NOT NULL,
+  quantity_delta REAL NOT NULL,
+  reason TEXT,
+  actor_user_id TEXT,
+  occurred_at TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'pending'
+);
+
+CREATE TABLE IF NOT EXISTS sales_transactions_local (
+  id TEXT PRIMARY KEY,
+  transaction_no TEXT NOT NULL UNIQUE,
+  branch_id TEXT NOT NULL,
+  register_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  shift_id TEXT,
+  subtotal INTEGER NOT NULL DEFAULT 0,
+  discount_total INTEGER NOT NULL DEFAULT 0,
+  tax_total INTEGER NOT NULL DEFAULT 0,
+  grand_total INTEGER NOT NULL DEFAULT 0,
+  payment_status TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sales_transaction_items_local (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL REFERENCES sales_transactions_local(id),
+  product_id TEXT NOT NULL,
+  sku TEXT NOT NULL,
+  name TEXT NOT NULL,
+  quantity REAL NOT NULL,
+  unit_price INTEGER NOT NULL,
+  discount_total INTEGER NOT NULL DEFAULT 0,
+  subtotal INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS payments_local (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL REFERENCES sales_transactions_local(id),
+  method TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'pending'
+);
+
+CREATE TABLE IF NOT EXISTS sync_queue_local (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL UNIQUE,
+  event_type TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  last_attempt_at TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_queue_local_status ON sync_queue_local(status);
+CREATE INDEX IF NOT EXISTS idx_transactions_local_sync_status ON sales_transactions_local(sync_status);

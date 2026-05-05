@@ -15,9 +15,13 @@
     "verbatimModuleSyntax": true,
     "baseUrl": ".",
     "paths": {
+      "@omnia/config": ["packages/config/src/index.ts"],
       "@omnia/config/*": ["packages/config/src/*"],
+      "@omnia/shared-utils": ["packages/shared-utils/src/index.ts"],
       "@omnia/shared-utils/*": ["packages/shared-utils/src/*"],
+      "@omnia/types": ["packages/types/src/index.ts"],
       "@omnia/types/*": ["packages/types/src/*"],
+      "@omnia/ui": ["packages/ui/src/index.ts"],
       "@omnia/ui/*": ["packages/ui/src/*"]
     }
   }
