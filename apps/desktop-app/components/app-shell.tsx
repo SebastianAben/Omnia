@@ -6,9 +6,11 @@ import type { ComponentType, ReactNode } from "react";
 import { Badge, Button, cn } from "@omnia/ui";
 import {
   BarChart3,
+  Clock3,
   LayoutDashboard,
   MonitorCog,
   ReceiptText,
+  ScrollText,
   RefreshCcw,
 } from "lucide-react";
 import { roleLabels, type OmniaRole, useAppState } from "@/lib/app-state";
@@ -20,20 +22,24 @@ const navByRole: Record<
 > = {
   cashier: [
     { href: "/pos", label: "POS", icon: ReceiptText },
+    { href: "/shift", label: "Shift", icon: Clock3 },
+    { href: "/receipts", label: "Receipts", icon: ScrollText },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
   ],
   supervisor: [
-    { href: "/", label: "Branch Ops", icon: LayoutDashboard },
+    { href: "/workspace", label: "Branch Ops", icon: LayoutDashboard },
     { href: "/pos", label: "POS", icon: ReceiptText },
+    { href: "/shift", label: "Shift", icon: Clock3 },
+    { href: "/receipts", label: "Receipts", icon: ScrollText },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
   ],
   hq_admin: [
-    { href: "/", label: "Control", icon: MonitorCog },
+    { href: "/workspace", label: "Control", icon: MonitorCog },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
     { href: "/pos", label: "POS Preview", icon: ReceiptText },
   ],
   executive: [
-    { href: "/", label: "Analytics", icon: BarChart3 },
+    { href: "/workspace", label: "Analytics", icon: BarChart3 },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
   ],
 };
@@ -51,7 +57,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             Omnia
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            Desktop Sprint 0 shell
+            Sprint 3 POS workspace
           </div>
         </div>
 
@@ -105,14 +111,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-export function PlaceholderPanel({
+export function WorkspacePanel({
   title,
   description,
   children,
+  badge,
 }: {
   title: string;
   description: string;
   children?: ReactNode;
+  badge?: string;
 }) {
   return (
     <section className="rounded-md border border-slate-200 bg-white p-5">
@@ -123,9 +131,11 @@ export function PlaceholderPanel({
             {description}
           </p>
         </div>
-        <Badge>Placeholder</Badge>
+        {badge ? <Badge>{badge}</Badge> : null}
       </div>
       {children ? <div className="mt-5">{children}</div> : null}
     </section>
   );
 }
+
+export const PlaceholderPanel = WorkspacePanel;

@@ -6,10 +6,10 @@ import { roleLabels, useAppState } from "@/lib/app-state";
 
 export function StatusBar() {
   const {
-    branchName,
-    registerName,
+    branch,
+    register,
     role,
-    userName,
+    user,
     shiftStatus,
     isOnline,
     pendingSyncCount,
@@ -20,10 +20,10 @@ export function StatusBar() {
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex items-center gap-2 font-semibold text-slate-950">
           <Store size={16} aria-hidden="true" />
-          <span className="truncate">{branchName}</span>
+          <span className="truncate">{branch.name}</span>
         </div>
         <span className="text-slate-300">/</span>
-        <span className="text-slate-600">{registerName}</span>
+        <span className="text-slate-600">{register.name}</span>
         <Badge tone={shiftStatus === "open" ? "success" : "warning"}>
           Shift {shiftStatus}
         </Badge>
@@ -40,7 +40,7 @@ export function StatusBar() {
         </Badge>
         <div className="flex items-center gap-2">
           <UserRound size={16} aria-hidden="true" />
-          <span>{userName}</span>
+          <span>{user.fullName}</span>
           <span className="text-slate-400">({roleLabels[role]})</span>
         </div>
       </div>

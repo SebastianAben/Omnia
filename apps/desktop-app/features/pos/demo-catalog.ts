@@ -1,0 +1,48 @@
+import type { PosProduct } from "./pos-types";
+
+export const demoCatalog: PosProduct[] = [
+  {
+    id: "prd_demo_001",
+    sku: "SKU-001",
+    barcode: "8997001000011",
+    name: "Coffee Beans 250g",
+    categoryName: "Beverage",
+    unit: "pack",
+    price: 68000,
+    stockOnHand: 18,
+    minimumQuantity: 6,
+  },
+  {
+    id: "prd_demo_014",
+    sku: "SKU-014",
+    barcode: "8997001000141",
+    name: "Paper Bag Medium",
+    categoryName: "Packaging",
+    unit: "pcs",
+    price: 4000,
+    stockOnHand: 82,
+    minimumQuantity: 20,
+  },
+  {
+    id: "prd_demo_102",
+    sku: "SKU-102",
+    barcode: "8997001001025",
+    name: "Oat Milk 1L",
+    categoryName: "Beverage",
+    unit: "box",
+    price: 56000,
+    stockOnHand: 9,
+    minimumQuantity: 8,
+  },
+  {
+    id: "prd_demo_117",
+    sku: "SKU-117",
+    barcode: "8997001001179",
+    name: "Chocolate Syrup",
+    categoryName: "Topping",
+    unit: "bottle",
+    price: 45000,
+    stockOnHand: 5,
+    minimumQuantity: 4,
+  },
+];
