@@ -15,17 +15,11 @@ permissions:
   packages: write
 
 jobs:
-  deploy:
-    name: Validate and deploy backend
-    runs-on:
-      - self-hosted
-      - linux
-      - x64
-      - omnia-home
-    environment: ${{ format('omnia-{0}', github.event_name == 'pull_request' && github.base_ref || github.ref_name) }}
-    concurrency:
-      group: omnia-${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}-deploy
-      cancel-in-progress: false
+  build-image:
+    name: Validate, build, and publish image
+    runs-on: ubuntu-latest
+    outputs:
+      target_branch: ${{ steps.image-metadata.outputs.target_branch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,8 +54,10 @@ jobs:
         run: pnpm build
 
       - name: Set image metadata
+        id: image-metadata
         run: |
           target_branch="${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}"
+          echo "target_branch=${target_branch}" >> "$GITHUB_OUTPUT"
           echo "DEPLOY_TARGET_BRANCH=${target_branch}" >> "$GITHUB_ENV"
           echo "BACKEND_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/omnia-backend-api" >> "$GITHUB_ENV"
           echo "BACKEND_IMAGE_TAG=${target_branch}" >> "$GITHUB_ENV"
@@ -87,7 +83,36 @@ jobs:
             ${{ env.BACKEND_IMAGE }}:${{ env.BACKEND_IMAGE_TAG }}
             ${{ env.BACKEND_IMAGE }}:${{ env.BACKEND_IMAGE_SHA_TAG }}
 
+      - name: Upload deployment files
+        uses: actions/upload-artifact@v4
+        with:
+          name: omnia-deployment-files
+          path: |
+            deploy/home-server/docker-compose.server.yml
+            scripts/deploy-home-server.sh
+
+  deploy:
+    name: Deploy backend
+    needs: build-image
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - omnia-home
+    environment: ${{ format('omnia-{0}', needs.build-image.outputs.target_branch) }}
+    concurrency:
+      group: omnia-${{ needs.build-image.outputs.target_branch }}-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Download deployment files
+        uses: actions/download-artifact@v4
+        with:
+          name: omnia-deployment-files
+
+      - name: Prepare deploy script
+        run: chmod +x scripts/deploy-home-server.sh
+
       - name: Deploy to home server
         env:
-          DEPLOY_TARGET_BRANCH: ${{ env.DEPLOY_TARGET_BRANCH }}
+          DEPLOY_TARGET_BRANCH: ${{ needs.build-image.outputs.target_branch }}
         run: scripts/deploy-home-server.sh
