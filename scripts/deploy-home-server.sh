@@ -52,11 +52,47 @@ fi
 
 compose=(docker compose --env-file .env.server -p "$compose_project" -f "$compose_file")
 
+log_step() {
+  echo
+  echo "==> $*"
+}
+
+show_compose_diagnostics() {
+  echo
+  echo "==> Compose status"
+  "${compose[@]}" ps || true
+
+  echo
+  echo "==> Postgres logs"
+  "${compose[@]}" logs --tail=100 postgres || true
+}
+
+run_migration() {
+  set +e
+  "${compose[@]}" run --rm migrate
+  local migrate_status=$?
+  set -e
+
+  if [[ "$migrate_status" -ne 0 ]]; then
+    echo "Migration failed with exit code $migrate_status" >&2
+    show_compose_diagnostics
+    exit "$migrate_status"
+  fi
+}
+
+log_step "Pull backend and migrate images"
 "${compose[@]}" pull backend migrate
+
+log_step "Start PostgreSQL and Redis"
 "${compose[@]}" up -d postgres redis
-"${compose[@]}" run --rm migrate
+
+log_step "Run database migration"
+run_migration
+
+log_step "Start backend"
 "${compose[@]}" up -d backend
 
+log_step "Check backend health"
 for attempt in {1..30}; do
   if curl --fail --silent --show-error "$health_url" >/dev/null; then
     echo "Deployment health check passed: $health_url"
@@ -68,5 +104,5 @@ for attempt in {1..30}; do
 done
 
 echo "Deployment health check failed: $health_url" >&2
-"${compose[@]}" ps
+show_compose_diagnostics
 exit 1

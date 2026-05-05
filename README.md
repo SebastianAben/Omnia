@@ -104,6 +104,41 @@ mkdir -p /home/froztbitez/web-server/omnia/main
 
 Copy `deploy/home-server/.env.server.example` menjadi `.env.server` di masing-masing folder deployment, lalu sesuaikan `COMPOSE_PROJECT_NAME`, `BACKEND_IMAGE`, `BACKEND_HOST_PORT`, `APP_ENV`, `PUBLIC_API_URL`, `CORS_ORIGINS`, dan secret. Gunakan `BACKEND_IMAGE=ghcr.io/sebastianaben/omnia-backend-api:dev` untuk dev dan `BACKEND_IMAGE=ghcr.io/sebastianaben/omnia-backend-api:main` untuk main.
 
+Gunakan password PostgreSQL yang URL-friendly, misalnya:
+
+```bash
+openssl rand -hex 32
+```
+
+Nilai password di `POSTGRES_PASSWORD` harus sama dengan password di `DATABASE_URL`.
+
+Contoh nilai environment-specific:
+
+```text
+# /home/froztbitez/web-server/omnia/dev/.env.server
+COMPOSE_PROJECT_NAME=omnia-dev
+BACKEND_IMAGE=ghcr.io/sebastianaben/omnia-backend-api:dev
+BACKEND_HOST_PORT=4101
+APP_ENV=staging
+PUBLIC_API_URL=https://api-dev-omnia.albern.space
+
+# /home/froztbitez/web-server/omnia/main/.env.server
+COMPOSE_PROJECT_NAME=omnia-main
+BACKEND_IMAGE=ghcr.io/sebastianaben/omnia-backend-api:main
+BACKEND_HOST_PORT=4100
+APP_ENV=production
+PUBLIC_API_URL=https://api-omnia.albern.space
+```
+
+`CORS_ORIGINS` berisi origin frontend yang mengakses backend, bukan domain backend. Untuk local development, `http://localhost:3000` tetap boleh dipakai; tambahkan domain frontend Vercel ketika sudah tersedia.
+
+Reverse proxy/Nginx Proxy Manager:
+
+```text
+api-dev-omnia.albern.space -> http://127.0.0.1:4101
+api-omnia.albern.space     -> http://127.0.0.1:4100
+```
+
 Jika package GHCR dibuat private, login Docker satu kali di home server sebelum deploy:
 
 ```bash
