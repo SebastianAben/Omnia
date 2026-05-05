@@ -79,8 +79,9 @@ Checklist ini menggantikan dokumen persiapan yang sebelumnya terpisah. Gunakan s
 - [x] SQLite local schema tersedia.
 - [x] Seed data dasar tersedia.
 - [x] API pattern REST dan OpenAPI-ready sudah dipilih.
-- [ ] CI/CD belum dibuat.
-- [ ] Auth production-grade, sync apply logic, dan transaksi POS nyata masih lanjut sprint berikutnya.
+- [x] CI/CD GitHub Actions sudah tersedia untuk validasi, build image backend, publish GHCR, dan deploy backend.
+- [x] Sync apply logic dan transaksi POS lokal nyata sudah tersedia.
+- [ ] Auth masih demo-grade dan belum production-grade.
 
 ### 4.4 AI-Assisted Development
 
@@ -593,7 +594,7 @@ Membangun pengalaman POS desktop setelah backend, master data, local schema, dan
 ### Checklist Sprint 3
 
 - [x] Login UI berjalan
-- [ ] `auth/me` dipakai untuk session restore
+- [x] `auth/me` dipakai untuk session restore
 - [x] Role-based menu dasar aktif
 - [x] Branch context aktif
 - [x] Product list dapat dibaca
@@ -605,8 +606,8 @@ Membangun pengalaman POS desktop setelah backend, master data, local schema, dan
 - [x] Shift open aktif
 - [x] Shift close aktif
 - [x] Transaction number unik per branch/register
-- [ ] Transaksi tersimpan ke SQLite lokal
-- [ ] Stok lokal berkurang setelah checkout
+- [x] Transaksi tersimpan ke SQLite lokal
+- [x] Stok lokal berkurang setelah checkout
 - [x] Event transaksi masuk sync queue lokal
 - [x] Sync status UI dasar aktif
 
@@ -616,16 +617,19 @@ Status per 2026-05-05:
 
 - Desktop app sudah direvisi dari placeholder page-level menjadi struktur modular berbasis domain di `apps/desktop-app/features`.
 - Login UI sudah memanggil `POST /auth/login`, menyimpan session ke Zustand app state, dan mengarahkan user ke `/pos` saat berhasil.
+- Session restore sudah memakai `GET /auth/me` saat token tersimpan tersedia.
 - Role shell memakai state terpusat dengan menu berdasarkan role cashier, supervisor, HQ admin, dan executive.
 - POS catalog memakai API-first read path ke `GET /products` dan `GET /branches/{branch_id}/product-prices`, dengan demo cache fallback agar flow cashier tetap bisa diuji saat backend tidak aktif.
 - Cart state dipisah ke `features/pos/cart-store.ts` dengan add, decrement, remove, item discount, clear, payment method, payment status, dan amount received state.
-- Checkout lokal membuat transaction record, payment record, stock movement payload, dan `transaction.bundle` sync queue record melalui boundary `features/local-first/local-checkout-repository.ts`.
-- Cashier navigation sudah mengikuti arahan design dengan POS, Shift, Receipts, dan Sync.
-- Shift open/close UI dasar tersedia untuk mengubah shift state lokal dan menampilkan pending sync warning.
+- Checkout lokal membuat transaction record, payment record, stock movement payload, update inventory lokal, dan `transaction.bundle` sync queue record melalui Electron IPC/preload bridge ke SQLite.
+- Cashier navigation sudah mengikuti arahan design dengan POS, Shift, Receipts, Inventory, dan Sync.
+- Shift open/close UI dasar tersedia untuk mengubah shift state lokal, memakai active shift ID saat close, dan menampilkan pending sync warning.
+- POS checkout sudah wajib berada dalam shift aktif.
 - Receipt preview dasar tersedia dari transaksi lokal, menampilkan transaction number, item, subtotal, discount, tax, total, payment method, dan pending sync status.
-- Sync status UI membaca queue lokal, menampilkan pending/failed summary, dan menyediakan tabel event type, entity, created time, attempts, dan status.
+- Sync status UI membaca queue lokal, menampilkan pending/failed summary untuk transaksi, shift, dan stock movement, serta menyediakan tabel event type, entity, created time, attempts, dan status.
+- Supervisor inventory page sudah tersedia untuk local stock adjustment, low stock watch, reason code, dan stock movement history.
 - Knowledge modularitas dan prosedur Sprint 3 tersedia di `docs/Sprint-3-Frontend-POS-Modularity-Knowledge.md`.
-- Catatan lanjutan: local persistence sementara masih memakai `localStorage` sebagai boundary UI; target final Sprint 3 tetap perlu Electron IPC/preload bridge ke SQLite `apps/desktop-app/local-store/schema.sql`.
+- Catatan lanjutan: role/permission UI masih dasar, receipt print fisik belum tersedia, dan manual smoke offline-online terbaru belum dijalankan setelah batch inventory.
 
 ### Definition of Done Sprint 3
 
@@ -734,9 +738,19 @@ Memberi visibilitas operasional untuk supervisor, HQ admin, dan executive berdas
 - [ ] Audit log transaksi aktif
 - [ ] Audit log stok aktif
 - [ ] Audit log harga aktif
-- [ ] Audit log sync aktif
-- [ ] Branch sync health aktif
+- [x] Audit log sync aktif
+- [x] Branch sync health aktif
 - [ ] Dashboard UI role-based aktif
+
+### Status Implementasi Sprint 4
+
+Status per 2026-05-05:
+
+- Dashboard cabang, dashboard pusat, sales summary, reporting KPI, filter periode/cabang, dan dashboard UI role-based belum tersedia.
+- Audit log sudah ditulis oleh login, transaction bundle sync, shift sync, dan stock movement sync.
+- Monitoring sync dasar sudah tersedia melalui `GET /api/v1/sync/jobs` dan `GET /api/v1/sync/logs`; ini memenuhi branch sync health awal, tetapi belum berupa dashboard health khusus.
+- Backend inventory read endpoint awal sudah tersedia melalui `GET /api/v1/inventory/balances`, `GET /api/v1/inventory/movements`, dan `GET /api/v1/inventory/stock-movements`.
+- Implementasi saat ini memajukan sebagian scope operasional Sprint 4, tetapi dashboard/reporting penuh tetap belum dimulai.
 
 ### Definition of Done Sprint 4
 
@@ -957,6 +971,10 @@ Menyediakan insight operasional awal dari data pusat tanpa memberi AI hak mengub
 - [ ] AI insights API aktif
 - [ ] AI insights UI aktif
 - [ ] AI job failure tercatat
+
+Catatan status:
+
+- AI worker skeleton sudah tersedia dari Sprint 0 sebagai fondasi runtime, tetapi pipeline AI insight Sprint 6 belum diimplementasikan. Karena checklist Sprint 6 mengacu pada fitur analytics aktif, item AI worker tetap belum ditandai selesai untuk sprint ini.
 
 ### Definition of Done Sprint 6
 
@@ -1395,24 +1413,24 @@ Mitigasi:
 
 ## 24. Checklist Keseluruhan MVP
 
-- [ ] Sprint 0 foundation selesai
+- [x] Sprint 0 foundation selesai
 - [x] Backend NestJS structure Sprint 0 dibuat
 - [x] Backend module boundary awal dibuat
-- [ ] Backend API dan Prisma foundation selesai
-- [ ] Local data dan hybrid sync backend selesai
-- [ ] Frontend POS desktop selesai
-- [ ] POS checkout lokal berjalan
-- [ ] Product catalog dan branch price berjalan
-- [ ] Shift dasar berjalan
-- [ ] Inventory local update berjalan
-- [ ] Sync queue lokal berjalan
-- [ ] Sync bundle ke pusat berjalan
-- [ ] Retry/replay berjalan
-- [ ] Idempotency berjalan
+- [x] Backend API dan Prisma foundation selesai
+- [x] Local data dan hybrid sync backend selesai
+- [x] Frontend POS desktop selesai
+- [x] POS checkout lokal berjalan
+- [x] Product catalog dan branch price berjalan
+- [x] Shift dasar berjalan
+- [x] Inventory local update berjalan
+- [x] Sync queue lokal berjalan
+- [x] Sync bundle ke pusat berjalan
+- [x] Retry/replay berjalan
+- [x] Idempotency berjalan
 - [ ] Dashboard cabang berjalan
 - [ ] Dashboard pusat berjalan
-- [ ] Audit log dasar berjalan
-- [ ] Sync health monitoring berjalan
+- [x] Audit log dasar berjalan
+- [x] Sync health monitoring berjalan
 - [ ] Shopee store skeleton berjalan
 - [ ] SKU mapping Shopee berjalan
 - [ ] Shopee order import berjalan

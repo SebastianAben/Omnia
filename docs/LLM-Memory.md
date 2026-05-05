@@ -49,9 +49,9 @@ Baca file ini dulu, lalu buka dokumen lain hanya jika perlu detail:
 - `docs/ERD-Awal-Hybrid-Omnichannel-Smart-POS.md`
 - `docs/Sync-Specification-Detail-Hybrid-Omnichannel-Smart-POS.md`
 
-## 4. Status Sprint 0 Terakhir
+## 4. Status Implementasi Terakhir
 
-Sprint 0 sudah dikerjakan sampai fondasi runnable.
+Sprint 0 sudah selesai sampai fondasi runnable. Implementasi saat ini sudah mulai masuk parsial ke Sprint 1-4, terutama auth demo, master data, POS local-first, shift dasar, receipt preview, local sync queue, replay sync transaksi, dan backend apply transaction bundle.
 
 Selesai:
 
@@ -75,16 +75,29 @@ Selesai:
 - design guide document
 - multi-agent workflow document
 - README setup local
+- GitHub Actions CI untuk typecheck, lint, dan build
+- GitHub Actions deploy backend ke home server self-hosted runner
+- POS checkout lokal via Electron bridge dan SQLite
+- receipt preview dari transaksi lokal
+- shift open/close dasar di SQLite lokal
+- sync status page untuk local queue, replay transaksi, dan replay shift
+- supervisor inventory page untuk stock adjustment lokal dan stock movement history
+- backend `POST /sync/bundles` untuk apply transaction bundle ke central DB
+- backend `POST /sync/events` untuk apply `shift.opened` dan `shift.closed` ke central DB
+- backend `POST /sync/events` untuk apply `stock_movement.created` ke central DB
+- backend inventory balances dan stock movements endpoint awal
+- backend sync jobs/logs endpoint untuk monitoring awal
 
 Belum selesai / masih skeleton:
 
 - UI belum pixel-perfect dari Figma
-- CI/GitHub Actions belum dibuat
 - auth belum production-grade
 - JWT masih implementasi HMAC internal sederhana, belum memakai library JWT production-grade
 - password hashing awal memakai scrypt untuk demo seed dan login
-- sync baru receive + enqueue, belum apply event ke central DB
-- POS belum transaksi nyata
+- permission/role guard belum production-grade
+- sync conflict resolver masih status dasar, belum ada UI resolver
+- POS belum punya receipt print nyata
+- inventory adjustment/supervisor stock movement masih MVP lokal-first, belum ada stock opname kompleks
 - dashboard, Shopee, AI insight belum masuk implementasi fitur
 
 ## 5. Struktur Repo
@@ -131,12 +144,20 @@ Endpoint saat ini:
 - `GET /api/v1/branches`
 - `GET /api/v1/branches/:branchId/product-prices`
 - `GET /api/v1/registers`
+- `GET /api/v1/inventory/balances`
+- `GET /api/v1/inventory/movements`
 - `POST /api/v1/sync/events`
+- `POST /api/v1/sync/bundles`
+- `GET /api/v1/sync/jobs`
+- `GET /api/v1/sync/logs`
 - Swagger: `/api/v1/docs`
 
 Catatan:
 
 - `POST /api/v1/sync/events` sudah enqueue ke Redis/BullMQ queue `omnia.sync`.
+- `POST /api/v1/sync/events` sudah apply `shift.opened` dan `shift.closed` secara idempotent ke tabel `shifts`, serta menulis `sync_jobs`, `sync_logs`, dan `audit_logs`.
+- `POST /api/v1/sync/events` sudah apply `stock_movement.created` secara idempotent ke tabel `stock_movements` dan update `inventory_balances`.
+- `POST /api/v1/sync/bundles` sudah validasi, idempotency check, apply sales transaction/items/payments/stock movements ke PostgreSQL, tulis `sync_jobs`, `sync_logs`, dan `audit_logs`, lalu enqueue acknowledgement job best-effort.
 - Auth guard sudah memverifikasi Bearer token HMAC dari `AuthService`, tetapi belum memakai library JWT production-grade.
 - Product, category, branch, register, user, role, dan branch price endpoint sudah membaca data dari Prisma.
 
@@ -160,12 +181,19 @@ Routes saat ini:
 
 - `/login`
 - `/`
+- `/workspace`
 - `/pos`
+- `/shift`
+- `/inventory`
+- `/receipts`
 - `/sync-status`
 
 Catatan:
 
-- UI masih placeholder netral, siap diganti berdasarkan export/screenshot Figma.
+- UI masih placeholder/netral dan belum pixel-perfect dari Figma, tetapi flow dasar login, workspace, POS, shift, inventory, receipts, dan sync status sudah tersedia.
+- POS checkout menyimpan transaksi, item, payment, stock movement, dan sync queue ke SQLite lokal melalui Electron bridge.
+- Inventory adjustment menyimpan stock movement lokal, mengubah inventory balance lokal, dan enqueue `stock_movement.created`.
+- Replay sync saat ini mengirim `transaction.bundle`, `shift.opened`, `shift.closed`, dan `stock_movement.created` ke backend.
 - Figma MCP/tool tidak tersedia saat Sprint 0 dikerjakan, jadi desain dari link Figma belum dibaca langsung.
 
 ### AI Worker
