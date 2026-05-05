@@ -29,6 +29,21 @@ docs/            product, technical, design, deployment, and workflow docs
 
 ## Setup Local
 
+Cara paling sederhana untuk menjalankan seluruh aplikasi lokal:
+
+```bash
+pnpm dev:full
+```
+
+Perintah ini akan install dependencies, membuat env lokal jika belum ada, menyalakan PostgreSQL/Redis via Docker Compose, menjalankan Prisma generate/migrate/seed, menyiapkan SQLite lokal desktop app, lalu menjalankan semua workspace dev process.
+
+Setelah siap:
+
+- Desktop renderer: `http://localhost:3000`
+- Backend API docs: `http://localhost:4000/api/v1/docs`
+
+### Manual
+
 1. Install dependencies:
 
 ```bash

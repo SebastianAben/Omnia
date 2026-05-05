@@ -1,10 +1,12 @@
 import {
   CanActivate,
   ExecutionContext,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
 
+import { AuthService } from "../auth.service";
 import { CurrentUser } from "../dto";
 
 type RequestWithUser = {
@@ -14,6 +16,8 @@ type RequestWithUser = {
 
 @Injectable()
 export class AuthGuard implements CanActivate {
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
+
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<RequestWithUser>();
     const authorization = request.headers.authorization;
@@ -25,12 +29,7 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException("Bearer token is required");
     }
 
-    request.user = {
-      id: "usr_demo",
-      full_name: "Demo User",
-      role_code: "cashier",
-      branch_id: "br_demo",
-    };
+    request.user = this.authService.verifyToken(token.slice("Bearer ".length));
 
     return true;
   }
