@@ -6,6 +6,7 @@ import { Button, Badge } from "@omnia/ui";
 import { WorkspacePanel } from "@/components/app-shell";
 import { useAppState } from "@/lib/app-state";
 import {
+  isLocalStoreBridgeAvailable,
   listLocalSyncQueue,
   saveShiftEvent,
 } from "@/features/local-first/local-checkout-repository";
@@ -21,30 +22,47 @@ export function ShiftPanel() {
   const [openingCashAmount, setOpeningCashAmount] = useState(100000);
   const [closingCashAmount, setClosingCashAmount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [localStoreReady, setLocalStoreReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void refreshPendingCount();
+    const hasBridge = isLocalStoreBridgeAvailable();
+    setLocalStoreReady(hasBridge);
+
+    if (hasBridge) {
+      void refreshPendingCount();
+    }
   }, []);
 
   const refreshPendingCount = async () => {
-    const queue = await listLocalSyncQueue();
-    setPendingCount(
-      queue.filter((item) => ["pending", "queued"].includes(item.status))
-        .length,
-    );
+    try {
+      const queue = await listLocalSyncQueue();
+      setPendingCount(
+        queue.filter((item) => ["pending", "queued"].includes(item.status))
+          .length,
+      );
+    } catch {
+      setLocalStoreReady(false);
+    }
   };
 
   const handleOpenShift = async () => {
-    const result = await saveShiftEvent({
-      branch,
-      register,
-      user,
-      action: "open",
-      openingCashAmount,
-    });
-    setActiveShiftId(result.shiftId);
-    setShiftStatus("open");
-    await refreshPendingCount();
+    setError(null);
+
+    try {
+      const result = await saveShiftEvent({
+        branch,
+        register,
+        user,
+        action: "open",
+        openingCashAmount,
+      });
+      setActiveShiftId(result.shiftId);
+      setShiftStatus("open");
+      await refreshPendingCount();
+    } catch (caught) {
+      setError(toShiftErrorMessage(caught));
+    }
   };
 
   const handleCloseShift = async () => {
@@ -52,23 +70,29 @@ export function ShiftPanel() {
       return;
     }
 
-    await saveShiftEvent({
-      branch,
-      register,
-      user,
-      action: "close",
-      shiftId: activeShiftId,
-      closingCashAmount,
-    });
-    setActiveShiftId(undefined);
-    setShiftStatus("closed");
-    await refreshPendingCount();
+    setError(null);
+
+    try {
+      await saveShiftEvent({
+        branch,
+        register,
+        user,
+        action: "close",
+        shiftId: activeShiftId,
+        closingCashAmount,
+      });
+      setActiveShiftId(undefined);
+      setShiftStatus("closed");
+      await refreshPendingCount();
+    } catch (caught) {
+      setError(toShiftErrorMessage(caught));
+    }
   };
 
   return (
     <WorkspacePanel
-      badge="Sprint 3"
-      description="Basic cashier shift control with branch/register context and pending sync warning."
+      badge="Operasional"
+      description="Kontrol buka dan tutup shift kasir sesuai cabang, register, serta status sinkronisasi lokal."
       title="Shift"
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -114,14 +138,16 @@ export function ShiftPanel() {
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Button
-              disabled={shiftStatus === "open"}
+              disabled={shiftStatus === "open" || !localStoreReady}
               onClick={handleOpenShift}
               type="button"
             >
               Open Shift
             </Button>
             <Button
-              disabled={shiftStatus === "closed" || !activeShiftId}
+              disabled={
+                shiftStatus === "closed" || !activeShiftId || !localStoreReady
+              }
               onClick={handleCloseShift}
               type="button"
               variant="secondary"
@@ -129,6 +155,19 @@ export function ShiftPanel() {
               Close Shift
             </Button>
           </div>
+
+          {!localStoreReady ? (
+            <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Local SQLite store belum tersedia di browser biasa. Buka Omnia
+              lewat Electron desktop untuk open/close shift.
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {error}
+            </div>
+          ) : null}
         </section>
 
         <aside className="rounded-md border border-slate-200 bg-white p-4">
@@ -161,4 +200,16 @@ export function ShiftPanel() {
       </div>
     </WorkspacePanel>
   );
+}
+
+function toShiftErrorMessage(caught: unknown) {
+  if (caught instanceof Error) {
+    if (caught.message.includes("local store bridge")) {
+      return "Local SQLite store belum tersedia. Jalankan app lewat Electron desktop, bukan browser biasa.";
+    }
+
+    return caught.message;
+  }
+
+  return "Shift gagal disimpan ke local store.";
 }

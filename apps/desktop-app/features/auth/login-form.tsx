@@ -12,7 +12,7 @@ export function LoginForm() {
   const router = useRouter();
   const setSession = useAppState((state) => state.setSession);
   const [username, setUsername] = useState("demo.cashier");
-  const [password, setPassword] = useState("password");
+  const [password, setPassword] = useState("password123");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setSubmitting] = useState(false);
 
