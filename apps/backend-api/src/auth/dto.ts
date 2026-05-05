@@ -1,22 +1,17 @@
-import { IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { z } from "zod";
 
-export class LoginDto {
-  @IsString()
-  @IsNotEmpty()
-  username!: string;
+export const loginSchema = z.object({
+  username: z.string().trim().min(1),
+  password: z.string().min(1),
+  device_id: z.string().trim().min(1).optional(),
+});
 
-  @IsString()
-  @IsNotEmpty()
-  password!: string;
-
-  @IsString()
-  @IsOptional()
-  device_id?: string;
-}
+export type LoginDto = z.infer<typeof loginSchema>;
 
 export type CurrentUser = {
   id: string;
   full_name: string;
+  username: string;
   role_code: string;
   branch_id?: string;
 };

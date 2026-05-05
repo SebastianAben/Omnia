@@ -12,6 +12,45 @@ enum BranchStatus {
   INACTIVE
 }
 
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_PAID
+  FAILED
+}
+
+enum TransactionStatus {
+  COMPLETED
+  VOIDED
+}
+
+enum SourceMode {
+  ONLINE
+  OFFLINE
+  OFFLINE_REPLAY
+}
+
+enum StockMovementType {
+  SALE_OUT
+  STOCK_IN
+  ADJUSTMENT_PLUS
+  ADJUSTMENT_MINUS
+  SYNC_CORRECTION
+}
+
+enum SyncJobStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  CONFLICT
+}
+
 enum SyncLogStatus {
   RECEIVED
   VALIDATED
@@ -36,72 +75,315 @@ model Role {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  roleId       String    @map("role_id")
-  branchId     String?   @map("branch_id")
-  fullName     String    @map("full_name")
-  username     String    @unique
-  email        String?   @unique
-  passwordHash String    @map("password_hash")
-  pinHash      String?   @map("pin_hash")
-  isActive     Boolean   @default(true) @map("is_active")
-  lastLoginAt  DateTime? @map("last_login_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  role         Role      @relation(fields: [roleId], references: [id])
-  branch       Branch?   @relation(fields: [branchId], references: [id])
-  syncLogs     SyncLog[]
+  id             String               @id @default(uuid())
+  roleId         String               @map("role_id")
+  branchId       String?              @map("branch_id")
+  fullName       String               @map("full_name")
+  username       String               @unique
+  email          String?              @unique
+  passwordHash   String               @map("password_hash")
+  pinHash        String?              @map("pin_hash")
+  isActive       Boolean              @default(true) @map("is_active")
+  lastLoginAt    DateTime?            @map("last_login_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  role           Role                 @relation(fields: [roleId], references: [id])
+  branch         Branch?              @relation(fields: [branchId], references: [id])
+  openedShifts   Shift[]              @relation("OpenedShifts")
+  closedShifts   Shift[]              @relation("ClosedShifts")
+  priceUpdates   BranchProductPrice[] @relation("PriceUpdatedBy")
+  stockMovements StockMovement[]      @relation("StockMovementActor")
+  transactions   SalesTransaction[]
+  syncJobs       SyncJob[]
+  syncLogs       SyncLog[]
+  auditLogs      AuditLog[]
 
+  @@index([roleId])
+  @@index([branchId])
   @@map("users")
 }
 
 model Branch {
-  id          String             @id @default(uuid())
-  code        String             @unique
-  name        String
-  address     String?
-  phone       String?
-  status      BranchStatus       @default(ACTIVE)
-  isActive    Boolean            @default(true) @map("is_active")
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-  users       User[]
-  inventory   InventoryBalance[]
-  syncLogs    SyncLog[]
+  id                String               @id @default(uuid())
+  code              String               @unique
+  name              String
+  address           String?
+  phone             String?
+  status            BranchStatus         @default(ACTIVE)
+  isActive          Boolean              @default(true) @map("is_active")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  users             User[]
+  registers         Register[]
+  prices            BranchProductPrice[]
+  inventoryBalances InventoryBalance[]
+  stockMovements    StockMovement[]
+  shifts            Shift[]
+  transactions      SalesTransaction[]
+  syncJobs          SyncJob[]
+  syncLogs          SyncLog[]
+  auditLogs         AuditLog[]
 
   @@map("branches")
 }
 
-model Product {
-  id          String             @id @default(uuid())
-  sku         String             @unique
-  barcode     String?
-  name        String
-  description String?
-  unit        String             @default("pcs")
-  isActive    Boolean            @default(true) @map("is_active")
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-  inventory   InventoryBalance[]
+model Register {
+  id               String             @id @default(uuid())
+  branchId         String             @map("branch_id")
+  code             String
+  name             String
+  deviceIdentifier String?            @map("device_identifier")
+  isActive         Boolean            @default(true) @map("is_active")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  branch           Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  shifts           Shift[]
+  transactions     SalesTransaction[]
 
+  @@unique([branchId, code])
+  @@index([branchId])
+  @@map("registers")
+}
+
+model Category {
+  id               String     @id @default(uuid())
+  parentCategoryId String?    @map("parent_category_id")
+  name             String
+  isActive         Boolean    @default(true) @map("is_active")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  parentCategory   Category?  @relation("CategoryTree", fields: [parentCategoryId], references: [id])
+  childCategories  Category[] @relation("CategoryTree")
+  products         Product[]
+
+  @@index([parentCategoryId])
+  @@map("categories")
+}
+
+model Product {
+  id                String                 @id @default(uuid())
+  categoryId        String?                @map("category_id")
+  sku               String                 @unique
+  barcode           String?                @unique
+  name              String
+  description       String?
+  unit              String                 @default("pcs")
+  isActive          Boolean                @default(true) @map("is_active")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+  category          Category?              @relation(fields: [categoryId], references: [id])
+  variants          ProductVariant[]
+  prices            BranchProductPrice[]
+  inventoryBalances InventoryBalance[]
+  stockMovements    StockMovement[]
+  transactionItems  SalesTransactionItem[]
+
+  @@index([categoryId])
+  @@index([name])
   @@map("products")
 }
 
-model InventoryBalance {
-  id        String   @id @default(uuid())
-  branchId  String   @map("branch_id")
-  productId String   @map("product_id")
-  quantity  Decimal  @default(0) @db.Decimal(14, 2)
-  updatedAt DateTime @updatedAt @map("updated_at")
-  branch    Branch   @relation(fields: [branchId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+model ProductVariant {
+  id           String   @id @default(uuid())
+  productId    String   @map("product_id")
+  variantName  String   @map("variant_name")
+  variantValue String   @map("variant_value")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, variantName, variantValue])
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model BranchProductPrice {
+  id              String    @id @default(uuid())
+  branchId        String    @map("branch_id")
+  productId       String    @map("product_id")
+  sellingPrice    Decimal   @map("selling_price") @db.Decimal(14, 2)
+  effectiveFrom   DateTime? @map("effective_from")
+  effectiveTo     DateTime? @map("effective_to")
+  isActive        Boolean   @default(true) @map("is_active")
+  updatedByUserId String?   @map("updated_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  branch          Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product         Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  updatedBy       User?     @relation("PriceUpdatedBy", fields: [updatedByUserId], references: [id])
 
   @@unique([branchId, productId])
+  @@index([productId])
+  @@map("branch_product_prices")
+}
+
+model InventoryBalance {
+  id                    String   @id @default(uuid())
+  branchId              String   @map("branch_id")
+  productId             String   @map("product_id")
+  quantityOnHand        Decimal  @default(0) @map("quantity_on_hand") @db.Decimal(14, 2)
+  minimumStockThreshold Decimal? @map("minimum_stock_threshold") @db.Decimal(14, 2)
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  branch                Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product               Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, productId])
+  @@index([productId])
   @@map("inventory_balances")
+}
+
+model StockMovement {
+  id                String            @id @default(uuid())
+  branchId          String            @map("branch_id")
+  productId         String            @map("product_id")
+  sourceType        String            @map("source_type")
+  sourceId          String?           @map("source_id")
+  movementType      StockMovementType @map("movement_type")
+  quantityDelta     Decimal           @map("quantity_delta") @db.Decimal(14, 2)
+  quantityBefore    Decimal?          @map("quantity_before") @db.Decimal(14, 2)
+  quantityAfter     Decimal?          @map("quantity_after") @db.Decimal(14, 2)
+  reasonCode        String            @map("reason_code")
+  notes             String?
+  performedByUserId String?           @map("performed_by_user_id")
+  movementAt        DateTime          @default(now()) @map("movement_at")
+  syncStatus        String?           @map("sync_status")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  branch            Branch            @relation(fields: [branchId], references: [id])
+  product           Product           @relation(fields: [productId], references: [id])
+  performedBy       User?             @relation("StockMovementActor", fields: [performedByUserId], references: [id])
+
+  @@index([branchId, productId])
+  @@index([sourceType, sourceId])
+  @@map("stock_movements")
+}
+
+model Shift {
+  id                String             @id @default(uuid())
+  branchId          String             @map("branch_id")
+  registerId        String             @map("register_id")
+  openedByUserId    String             @map("opened_by_user_id")
+  closedByUserId    String?            @map("closed_by_user_id")
+  openedAt          DateTime           @default(now()) @map("opened_at")
+  closedAt          DateTime?          @map("closed_at")
+  openingCashAmount Decimal?           @map("opening_cash_amount") @db.Decimal(14, 2)
+  closingCashAmount Decimal?           @map("closing_cash_amount") @db.Decimal(14, 2)
+  status            ShiftStatus        @default(OPEN)
+  branch            Branch             @relation(fields: [branchId], references: [id])
+  register          Register           @relation(fields: [registerId], references: [id])
+  openedBy          User               @relation("OpenedShifts", fields: [openedByUserId], references: [id])
+  closedBy          User?              @relation("ClosedShifts", fields: [closedByUserId], references: [id])
+  transactions      SalesTransaction[]
+
+  @@index([branchId, status])
+  @@index([registerId, status])
+  @@map("shifts")
+}
+
+model SalesTransaction {
+  id                      String                 @id @default(uuid())
+  transactionNo           String                 @unique @map("transaction_no")
+  branchId                String                 @map("branch_id")
+  registerId              String                 @map("register_id")
+  shiftId                 String?                @map("shift_id")
+  cashierUserId           String                 @map("cashier_user_id")
+  transactionDatetime     DateTime               @default(now()) @map("transaction_datetime")
+  subtotalAmount          Decimal                @map("subtotal_amount") @db.Decimal(14, 2)
+  discountAmount          Decimal                @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  taxAmount               Decimal                @default(0) @map("tax_amount") @db.Decimal(14, 2)
+  totalAmount             Decimal                @map("total_amount") @db.Decimal(14, 2)
+  paymentStatus           PaymentStatus          @default(PENDING) @map("payment_status")
+  transactionStatus       TransactionStatus      @default(COMPLETED) @map("transaction_status")
+  sourceMode              SourceMode             @default(ONLINE) @map("source_mode")
+  localReferenceId        String?                @map("local_reference_id")
+  centralResolutionStatus String?                @map("central_resolution_status")
+  syncedAt                DateTime?              @map("synced_at")
+  createdAt               DateTime               @default(now()) @map("created_at")
+  branch                  Branch                 @relation(fields: [branchId], references: [id])
+  register                Register               @relation(fields: [registerId], references: [id])
+  shift                   Shift?                 @relation(fields: [shiftId], references: [id])
+  cashier                 User                   @relation(fields: [cashierUserId], references: [id])
+  items                   SalesTransactionItem[]
+  payments                Payment[]
+
+  @@index([branchId, transactionDatetime])
+  @@index([cashierUserId])
+  @@map("sales_transactions")
+}
+
+model SalesTransactionItem {
+  id                  String           @id @default(uuid())
+  salesTransactionId  String           @map("sales_transaction_id")
+  productId           String           @map("product_id")
+  productNameSnapshot String           @map("product_name_snapshot")
+  skuSnapshot         String           @map("sku_snapshot")
+  unitPrice           Decimal          @map("unit_price") @db.Decimal(14, 2)
+  quantity            Decimal          @db.Decimal(14, 2)
+  discountAmount      Decimal          @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  taxAmount           Decimal          @default(0) @map("tax_amount") @db.Decimal(14, 2)
+  lineTotal           Decimal          @map("line_total") @db.Decimal(14, 2)
+  transaction         SalesTransaction @relation(fields: [salesTransactionId], references: [id], onDelete: Cascade)
+  product             Product          @relation(fields: [productId], references: [id])
+
+  @@index([salesTransactionId])
+  @@index([productId])
+  @@map("sales_transaction_items")
+}
+
+model Payment {
+  id                 String           @id @default(uuid())
+  salesTransactionId String           @map("sales_transaction_id")
+  paymentMethodCode  String           @map("payment_method_code")
+  amount             Decimal          @db.Decimal(14, 2)
+  paymentStatus      PaymentStatus    @default(PENDING) @map("payment_status")
+  paymentReference   String?          @map("payment_reference")
+  paidAt             DateTime?        @map("paid_at")
+  notes              String?
+  createdAt          DateTime         @default(now()) @map("created_at")
+  transaction        SalesTransaction @relation(fields: [salesTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([salesTransactionId])
+  @@map("payments")
+}
+
+model SalesChannel {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  type      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("sales_channels")
+}
+
+model SyncJob {
+  id                String        @id @default(uuid())
+  branchId          String        @map("branch_id")
+  triggeredByUserId String?       @map("triggered_by_user_id")
+  jobType           String        @map("job_type")
+  entityType        String        @map("entity_type")
+  entityId          String?       @map("entity_id")
+  payloadReference  String?       @map("payload_reference")
+  status            SyncJobStatus @default(PENDING)
+  attemptCount      Int           @default(0) @map("attempt_count")
+  lastAttemptAt     DateTime?     @map("last_attempt_at")
+  nextRetryAt       DateTime?     @map("next_retry_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  branch            Branch        @relation(fields: [branchId], references: [id])
+  triggeredBy       User?         @relation(fields: [triggeredByUserId], references: [id])
+  logs              SyncLog[]
+
+  @@index([branchId, status])
+  @@index([entityType, entityId])
+  @@map("sync_jobs")
 }
 
 model SyncLog {
   id             String        @id @default(uuid())
+  syncJobId      String?       @map("sync_job_id")
   eventId        String        @unique @map("event_id")
   eventType      String        @map("event_type")
   eventVersion   String        @map("event_version")
@@ -109,17 +391,43 @@ model SyncLog {
   entityType     String        @map("entity_type")
   entityId       String        @map("entity_id")
   status         SyncLogStatus @default(RECEIVED)
+  logLevel       String        @default("info") @map("log_level")
+  message        String?
   idempotencyKey String?       @unique @map("idempotency_key")
   payload        Json
+  errorCode      String?       @map("error_code")
   errorMessage   String?       @map("error_message")
   producedById   String?       @map("produced_by_user_id")
   occurredAt     DateTime      @map("occurred_at")
+  loggedAt       DateTime      @default(now()) @map("logged_at")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
+  syncJob        SyncJob?      @relation(fields: [syncJobId], references: [id], onDelete: SetNull)
   branch         Branch        @relation(fields: [branchId], references: [id])
   producedBy     User?         @relation(fields: [producedById], references: [id])
 
   @@index([branchId, status])
   @@index([entityType, entityId])
+  @@index([syncJobId])
   @@map("sync_logs")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  branchId    String?  @map("branch_id")
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  action      String
+  oldValueRef String?  @map("old_value_ref")
+  newValueRef String?  @map("new_value_ref")
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  branch      Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
 }
