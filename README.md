@@ -1,2 +1,130 @@
 # Omnia
-SMART POS System for local Micro, Small, and Medium Enterprises
+
+Omnia adalah Hybrid Omnichannel Smart POS untuk retail dan UMKM multi-cabang. MVP berfokus pada POS local-first, inventory, sync ke pusat, dashboard dasar, Shopee integration, dan AI insights sederhana.
+
+## Sprint 0 Status
+
+Repo ini sedang berada di Sprint 0: fondasi project, bukan fitur bisnis lengkap. Target Sprint 0 adalah membuat monorepo, desktop app shell, backend API skeleton, database foundation, auth skeleton, sync skeleton, seed data, dan deployment/env contract siap dikembangkan.
+
+## Struktur Repo
+
+```text
+apps/
+  desktop-app/   Next.js + Electron shell
+  backend-api/   NestJS central API
+  ai-worker/     Python AI/analytics worker
+packages/
+  ui/            shared UI primitives
+  types/         shared TypeScript contracts
+  config/        shared runtime config helpers
+  shared-utils/  shared utilities
+docs/            product, technical, design, deployment, and workflow docs
+```
+
+## Prerequisites
+
+- Node.js 20+
+- pnpm 9+
+- Docker dan Docker Compose untuk PostgreSQL/Redis local
+
+## Setup Local
+
+1. Install dependencies:
+
+```bash
+pnpm install
+```
+
+2. Copy environment template:
+
+```bash
+cp .env.example .env.local
+```
+
+3. Start local infrastructure:
+
+```bash
+docker compose up -d postgres redis
+```
+
+4. Prepare central and local databases:
+
+```bash
+pnpm --filter @omnia/backend-api db:migrate:local
+pnpm --filter @omnia/backend-api prisma:seed
+pnpm --filter @omnia/desktop-app localdb:init
+```
+
+5. Run workspace apps:
+
+```bash
+pnpm dev
+```
+
+## Root Scripts
+
+- `pnpm dev`
+- `pnpm build`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm format`
+- `pnpm format:check`
+
+## CI/CD Home Server
+
+Backend deployment memakai GitHub Actions dan self-hosted runner di home server.
+
+- `dev` deploy ke `/home/froztbitez/web-server/omnia/dev` dengan host port `4101`
+- `main` deploy ke `/home/froztbitez/web-server/omnia/main` dengan host port `4100`
+- Compose project dipisah menjadi `omnia-dev` dan `omnia-main`
+- Secret server disimpan di `.env.server` pada folder deployment, bukan di repo
+
+Setup awal di home server:
+
+```bash
+mkdir -p /home/froztbitez/web-server/omnia/dev
+mkdir -p /home/froztbitez/web-server/omnia/main
+```
+
+Copy `deploy/home-server/.env.server.example` menjadi `.env.server` di masing-masing folder deployment, lalu sesuaikan `COMPOSE_PROJECT_NAME`, `BACKEND_IMAGE`, `BACKEND_HOST_PORT`, `APP_ENV`, `PUBLIC_API_URL`, `CORS_ORIGINS`, dan secret.
+
+Runner GitHub untuk repo `SebastianAben/Omnia` perlu dibuat satu kali dari GitHub repository settings dengan label:
+
+```text
+self-hosted, linux, x64, omnia-home
+```
+
+Folder runner yang direkomendasikan:
+
+```text
+/home/froztbitez/actions-runner-omnia
+```
+
+Setelah membuat token runner di GitHub, jalankan di home server:
+
+```bash
+cd /path/to/Omnia
+RUNNER_TOKEN=replace-with-github-runner-token scripts/setup-home-runner.sh
+```
+
+## Environment Strategy
+
+Deployment values must come from environment variables. Do not hardcode production URLs or secrets in source code.
+
+Key values:
+
+- `NEXT_PUBLIC_API_BASE_URL` for frontend-to-backend API target
+- `CORS_ORIGINS` for backend allowlist
+- `DATABASE_URL` for PostgreSQL
+- `REDIS_URL` for Redis/BullMQ
+- `PUBLIC_API_URL` for backend public URL
+
+See [Deployment Strategy](docs/Deployment-Strategy-Hybrid-Omnichannel-Smart-POS.md).
+
+## Design Workflow
+
+UI implementation should follow the selected Figma design and [DESIGN.md](docs/DESIGN.md). If the Figma source is not available to the developer/agent, implement only neutral placeholders and wait for exported screenshots/assets before doing visual polish.
+
+## Multi-Agent Workflow
+
+Sprint work follows [Multi-Agent Workflow](docs/Multi-Agent-Workflow-Hybrid-Omnichannel-Smart-POS.md). PM must provide a final report after implementation, including completed work, validation, blockers, manual user actions, and next steps.

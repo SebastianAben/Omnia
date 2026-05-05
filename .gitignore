@@ -1,0 +1,17 @@
+docs/
+.DS_Store
+node_modules/
+.pnpm-store/
+dist/
+build/
+coverage/
+apps/*/dist/
+apps/*/dist-*/
+apps/*/.next/
+*.tsbuildinfo
+.omnia/
+apps/*/.omnia/
+.env
+.env.local
+.env.*.local
+*.log

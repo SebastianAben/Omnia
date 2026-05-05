@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SyncLogStatus {
+  RECEIVED
+  VALIDATED
+  APPLIED
+  REJECTED
+  DUPLICATE_IGNORED
+  CONFLICT_DETECTED
+  RESOLVED
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  users       User[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  roleId       String    @map("role_id")
+  branchId     String?   @map("branch_id")
+  fullName     String    @map("full_name")
+  username     String    @unique
+  email        String?   @unique
+  passwordHash String    @map("password_hash")
+  pinHash      String?   @map("pin_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  role         Role      @relation(fields: [roleId], references: [id])
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  syncLogs     SyncLog[]
+
+  @@map("users")
+}
+
+model Branch {
+  id          String             @id @default(uuid())
+  code        String             @unique
+  name        String
+  address     String?
+  phone       String?
+  status      BranchStatus       @default(ACTIVE)
+  isActive    Boolean            @default(true) @map("is_active")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  users       User[]
+  inventory   InventoryBalance[]
+  syncLogs    SyncLog[]
+
+  @@map("branches")
+}
+
+model Product {
+  id          String             @id @default(uuid())
+  sku         String             @unique
+  barcode     String?
+  name        String
+  description String?
+  unit        String             @default("pcs")
+  isActive    Boolean            @default(true) @map("is_active")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  inventory   InventoryBalance[]
+
+  @@map("products")
+}
+
+model InventoryBalance {
+  id        String   @id @default(uuid())
+  branchId  String   @map("branch_id")
+  productId String   @map("product_id")
+  quantity  Decimal  @default(0) @db.Decimal(14, 2)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@unique([branchId, productId])
+  @@map("inventory_balances")
+}
+
+model SyncLog {
+  id             String        @id @default(uuid())
+  eventId        String        @unique @map("event_id")
+  eventType      String        @map("event_type")
+  eventVersion   String        @map("event_version")
+  branchId       String        @map("branch_id")
+  entityType     String        @map("entity_type")
+  entityId       String        @map("entity_id")
+  status         SyncLogStatus @default(RECEIVED)
+  idempotencyKey String?       @unique @map("idempotency_key")
+  payload        Json
+  errorMessage   String?       @map("error_message")
+  producedById   String?       @map("produced_by_user_id")
+  occurredAt     DateTime      @map("occurred_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  branch         Branch        @relation(fields: [branchId], references: [id])
+  producedBy     User?         @relation(fields: [producedById], references: [id])
+
+  @@index([branchId, status])
+  @@index([entityType, entityId])
+  @@map("sync_logs")
+}

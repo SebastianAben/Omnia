@@ -1,0 +1,11 @@
+{
+  "name": "@omnia/ai-worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "python3 src/main.py",
+    "build": "python3 -m py_compile src/main.py",
+    "lint": "python3 -m py_compile src/main.py",
+    "typecheck": "python3 -m py_compile src/main.py"
+  }
+}
