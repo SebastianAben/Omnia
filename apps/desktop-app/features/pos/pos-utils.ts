@@ -1,11 +1,15 @@
 import type { CartLine, CartTotals, PosProduct } from "./pos-types";
 
-export const formatRupiah = (value: number) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
+export const formatRupiah = (value: number) => {
+  const rounded = Math.round(value);
+  const sign = rounded < 0 ? "-" : "";
+  const digits = String(Math.abs(rounded)).replace(
+    /\B(?=(\d{3})+(?!\d))/g,
+    ".",
+  );
+
+  return `${sign}Rp${digits}`;
+};
 
 export function calculateCartTotals(lines: CartLine[]): CartTotals {
   const subtotal = lines.reduce(

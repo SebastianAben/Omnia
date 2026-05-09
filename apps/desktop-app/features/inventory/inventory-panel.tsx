@@ -125,7 +125,9 @@ export function InventoryPanel() {
       );
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Failed to save adjustment.",
+        error instanceof Error
+          ? error.message
+          : "Penyesuaian stok gagal disimpan.",
       );
     } finally {
       setSaving(false);

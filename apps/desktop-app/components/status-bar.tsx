@@ -16,8 +16,8 @@ export function StatusBar() {
   } = useAppState();
 
   return (
-    <header className="flex h-12 items-center justify-between border-b border-slate-200 bg-white px-4 text-sm">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="sticky top-0 z-20 flex min-h-14 flex-col gap-2 border-b border-line/80 bg-white/78 px-4 py-3 text-sm shadow-[0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-xl md:flex-row md:items-center md:justify-between md:px-6">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 md:gap-3">
         <div className="flex items-center gap-2 font-semibold text-slate-950">
           <Store size={16} aria-hidden="true" />
           <span className="truncate">{branch.name}</span>
@@ -29,7 +29,7 @@ export function StatusBar() {
         </Badge>
       </div>
 
-      <div className="flex items-center gap-3 text-slate-600">
+      <div className="flex flex-wrap items-center gap-2 text-slate-600 md:gap-3">
         <Badge tone={isOnline ? "success" : "danger"}>
           <Cloud size={12} aria-hidden="true" />
           {isOnline ? "Online" : "Offline"}
@@ -38,10 +38,10 @@ export function StatusBar() {
           <RefreshCcw size={12} aria-hidden="true" />
           {pendingSyncCount} pending
         </Badge>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-2.5 py-1.5">
           <UserRound size={16} aria-hidden="true" />
-          <span>{user.fullName}</span>
-          <span className="text-slate-400">({roleLabels[role]})</span>
+          <span className="font-medium text-slate-800">{user.fullName}</span>
+          <span className="text-slate-400">{roleLabels[role]}</span>
         </div>
       </div>
     </header>

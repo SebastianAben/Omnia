@@ -32,7 +32,11 @@ export function DashboardWorkspace() {
   const [days, setDays] = useState("7");
   const [branchFilter, setBranchFilter] = useState("");
   const scope: DashboardScope =
-    role === "supervisor" ? "branch" : role === "cashier" ? "branch" : "central";
+    role === "supervisor"
+      ? "branch"
+      : role === "cashier"
+        ? "branch"
+        : "central";
   const filters = useMemo<DashboardFilters>(() => {
     const to = new Date();
     const from = new Date(to);
@@ -46,18 +50,20 @@ export function DashboardWorkspace() {
   }, [branch.id, branchFilter, days, scope]);
   const dashboard = useDashboard(scope, filters, token);
   const audit = useAuditLogs(
-    role === "supervisor" || role === "cashier" ? branch.id : branchFilter || undefined,
+    role === "supervisor" || role === "cashier"
+      ? branch.id
+      : branchFilter || undefined,
     token,
   );
 
   if (!token) {
     return (
       <WorkspacePanel
-        badge="Sign in required"
+        badge="Login dibutuhkan"
         description="Dashboard data is served from the central backend and requires an authenticated session."
         title="Operational Dashboard"
       >
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Login dulu supaya dashboard bisa membaca KPI pusat, audit log, dan
           sync health sesuai role.
         </div>
@@ -73,7 +79,9 @@ export function DashboardWorkspace() {
           ? "Branch dashboard from central synced data, scoped to active branch."
           : "Central dashboard for HQ and analyst review across branches."
       }
-      title={scope === "branch" ? `${branch.name} Dashboard` : "Central Dashboard"}
+      title={
+        scope === "branch" ? `${branch.name} Dashboard` : "Central Dashboard"
+      }
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SegmentedValue
@@ -88,7 +96,7 @@ export function DashboardWorkspace() {
         />
         {scope === "central" ? (
           <input
-            className="h-9 w-64 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-500"
+            className="h-10 w-64 rounded-2xl border border-line bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-200/70"
             onChange={(event) => setBranchFilter(event.target.value)}
             placeholder="Optional branch ID filter"
             value={branchFilter}
@@ -108,7 +116,10 @@ export function DashboardWorkspace() {
       {dashboard.isLoading ? (
         <StatePanel label="Loading dashboard data..." />
       ) : dashboard.isError ? (
-        <StatePanel label="Dashboard API is unavailable or access is denied." tone="danger" />
+        <StatePanel
+          label="Dashboard API is unavailable or access is denied."
+          tone="danger"
+        />
       ) : dashboard.data ? (
         <DashboardContent data={dashboard.data} />
       ) : null}
@@ -161,7 +172,7 @@ function DashboardContent({ data }: { data: DashboardData }) {
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-flow-dense gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Metric
           icon={BarChart3}
           label="Net sales"
@@ -193,7 +204,7 @@ function DashboardContent({ data }: { data: DashboardData }) {
           <div className="space-y-2">
             {data.payment_method_summary.map((item) => (
               <div
-                className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2"
+                className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2"
                 key={item.payment_method_code}
               >
                 <span className="text-sm font-medium uppercase text-slate-700">
@@ -215,7 +226,10 @@ function DashboardContent({ data }: { data: DashboardData }) {
         <Panel title="Branch Sync Health" icon={RefreshCcw}>
           <div className="divide-y divide-slate-200">
             {syncRows.map((row, index) => (
-              <SyncRow key={row.branch_id ?? row.branch?.id ?? index} row={row} />
+              <SyncRow
+                key={row.branch_id ?? row.branch?.id ?? index}
+                row={row}
+              />
             ))}
           </div>
         </Panel>
@@ -223,9 +237,9 @@ function DashboardContent({ data }: { data: DashboardData }) {
 
       {data.branch_performance?.length ? (
         <Panel title="Branch Performance" icon={Store}>
-          <div className="overflow-hidden rounded-md border border-slate-200">
+          <div className="overflow-hidden rounded-2xl border border-line">
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+              <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Branch</th>
                   <th className="px-3 py-2">Transactions</th>
@@ -273,7 +287,10 @@ function ProductRows({
         const sku = product.sku ?? product.product?.sku ?? "-";
 
         return (
-          <div className="grid grid-cols-[1fr_auto] gap-3 py-3" key={`${sku}-${index}`}>
+          <div
+            className="grid grid-cols-[1fr_auto] gap-3 py-3"
+            key={`${sku}-${index}`}
+          >
             <div>
               <div className="text-sm font-medium text-slate-950">{name}</div>
               <div className="mt-1 text-xs text-slate-500">{sku}</div>
@@ -335,17 +352,19 @@ function Metric({
   return (
     <div
       className={cn(
-        "rounded-md border bg-white p-4",
-        tone === "warning"
-          ? "border-amber-200 bg-amber-50"
-          : "border-slate-200",
+        "group rounded-3xl border bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] transition duration-300 hover:-translate-y-1 hover:shadow-lift",
+        tone === "warning" ? "border-amber-200 bg-amber-50" : "border-line/80",
       )}
     >
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Icon size={16} />
+      <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
+        <span className="grid size-8 place-items-center rounded-xl bg-slate-100 text-slate-700 transition group-hover:bg-slate-950 group-hover:text-white">
+          <Icon size={16} />
+        </span>
         {label}
       </div>
-      <div className="mt-3 text-xl font-semibold text-slate-950">{value}</div>
+      <div className="mt-4 font-mono text-2xl font-semibold tracking-[-0.05em] text-slate-950">
+        {value}
+      </div>
     </div>
   );
 }
@@ -360,9 +379,11 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4">
+    <section className="rounded-3xl border border-line/80 bg-white p-4 shadow-[0_12px_32px_-28px_rgba(15,23,42,0.45)]">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-950">
-        <Icon size={16} />
+        <span className="grid size-8 place-items-center rounded-xl bg-slate-100 text-slate-700">
+          <Icon size={16} />
+        </span>
         {title}
       </div>
       {children}
@@ -383,13 +404,13 @@ function SegmentedValue({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm font-medium text-slate-600">{label}</span>
-      <div className="inline-flex rounded-md border border-slate-300 bg-white p-1">
+      <span className="text-sm font-semibold text-slate-600">{label}</span>
+      <div className="inline-flex rounded-2xl border border-line bg-white p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
         {options.map(([optionValue, optionLabel]) => (
           <button
             className={cn(
-              "h-7 rounded px-3 text-xs font-medium text-slate-600",
-              value === optionValue && "bg-slate-950 text-white",
+              "h-8 rounded-xl px-3 text-xs font-semibold text-slate-600 transition",
+              value === optionValue && "bg-slate-950 text-white shadow-lift",
             )}
             key={optionValue}
             onClick={() => onChange(optionValue)}
@@ -413,10 +434,10 @@ function StatePanel({
   return (
     <div
       className={cn(
-        "rounded-md border p-4 text-sm",
+        "rounded-2xl border p-4 text-sm",
         tone === "danger"
           ? "border-rose-200 bg-rose-50 text-rose-700"
-          : "border-slate-200 bg-slate-50 text-slate-600",
+          : "border-line bg-slate-50 text-slate-600",
       )}
     >
       {label}
@@ -426,10 +447,11 @@ function StatePanel({
 
 function Coverage({ label, done }: { label: string; done?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2">
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2">
       <span>{label}</span>
-      <Badge tone={done ? "success" : "neutral"}>{done ? "Active" : "Todo"}</Badge>
+      <Badge tone={done ? "success" : "neutral"}>
+        {done ? "Active" : "Todo"}
+      </Badge>
     </div>
   );
 }
-

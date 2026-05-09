@@ -51,11 +51,11 @@ export function AiWorkspace() {
   if (!token) {
     return (
       <WorkspacePanel
-        badge="Sign in required"
-        description="AI insights are generated from central synced data and require an authenticated HQ or analyst session."
-        title="AI Insights"
+        badge="Login dibutuhkan"
+        description="Data dibaca dari pusat dan membutuhkan sesi HQ atau analyst."
+        title="AI Review"
       >
-        <StatePanel label="Login dulu untuk membaca insight analytics pusat." />
+        <StatePanel label="Login dulu untuk membaca ringkasan data pusat." />
       </WorkspacePanel>
     );
   }
@@ -64,11 +64,11 @@ export function AiWorkspace() {
     return (
       <WorkspacePanel
         badge={roleLabels[role]}
-        description="AI analytics is advisory and limited to HQ Admin and Executive / Analyst roles."
-        title="AI Insights"
+        description="Akses halaman ini dibatasi untuk HQ Admin dan Executive / Analyst."
+        title="AI Review"
       >
         <StatePanel
-          label="Role aktif tidak punya akses ke AI insights."
+          label="Role aktif tidak punya akses halaman ini."
           tone="danger"
         />
       </WorkspacePanel>
@@ -78,8 +78,8 @@ export function AiWorkspace() {
   return (
     <WorkspacePanel
       badge={roleLabels[role]}
-      description="Advisory analytics from central sales and inventory data. AI never changes stock, price, or order records."
-      title="AI Insights"
+      description="Ringkasan dari data penjualan dan inventori pusat. Halaman ini tidak mengubah stok, harga, atau order."
+      title="AI Review"
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
@@ -117,28 +117,28 @@ export function AiWorkspace() {
       <div className="mb-4 grid gap-3 md:grid-cols-3">
         <Metric
           icon={BrainCircuit}
-          label="Total insights"
+          label="Total catatan"
           value={String(insights.data?.length ?? 0)}
         />
         <Metric
           icon={AlertTriangle}
-          label="Low stock alerts"
+          label="Stok rendah"
           tone={(lowStock.data?.length ?? 0) > 0 ? "warning" : "neutral"}
           value={String(lowStock.data?.length ?? 0)}
         />
         <Metric
           icon={PackageSearch}
-          label="Stockout predictions"
+          label="Risiko stockout"
           tone={(stockout.data?.length ?? 0) > 0 ? "warning" : "neutral"}
           value={String(stockout.data?.length ?? 0)}
         />
       </div>
 
       {insights.isLoading ? (
-        <StatePanel label="Generating and loading AI insights..." />
+        <StatePanel label="Memuat ringkasan data..." />
       ) : insights.isError ? (
         <StatePanel
-          label="AI insights API is unavailable or access is denied."
+          label="API tidak tersedia atau akses ditolak."
           tone="danger"
         />
       ) : insights.data?.length ? (
@@ -147,7 +147,7 @@ export function AiWorkspace() {
           <InsightReference insights={insights.data} />
         </div>
       ) : (
-        <StatePanel label="No AI insights match the selected filters." />
+        <StatePanel label="Tidak ada catatan untuk filter ini." />
       )}
     </WorkspacePanel>
   );
