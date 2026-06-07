@@ -57,7 +57,7 @@ Sebelum demo/UAT:
 Prioritas setelah UAT:
 
 1. UAT feedback triage.
-2. Reporting export CSV/XLSX.
+2. Reporting export CSV: basic sales summary CSV tersedia; XLSX masih backlog.
 3. Replenishment recommendation.
 4. Marketplace berikutnya.
 5. Conflict resolution upgrade.

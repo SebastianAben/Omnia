@@ -1,4 +1,11 @@
-import { Controller, Get, Query, Req, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 
 import { assertCentralAccess, resolveBranchScope } from "../auth/access-scope";
@@ -8,6 +15,10 @@ import { ReportsService } from "./reports.service";
 
 type RequestWithUser = {
   user: CurrentUser;
+};
+
+type HeaderResponse = {
+  setHeader(name: string, value: string): void;
 };
 
 @ApiTags("reports")
@@ -32,6 +43,36 @@ export class ReportsController {
       from,
       to,
     });
+  }
+
+  @Get("sales-summary/export")
+  @ApiOkResponse({ description: "Sales summary export as bounded CSV." })
+  async salesSummaryExport(
+    @Req() request: RequestWithUser,
+    @Res({ passthrough: true }) response: HeaderResponse,
+    @Query("branch_id") branchId?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    assertCentralAccess(request.user);
+
+    const exportResult = await this.reportsService.salesSummaryCsv({
+      branch_id: resolveBranchScope(request.user, branchId),
+      from,
+      to,
+    });
+
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${exportResult.filename}"`,
+    );
+    response.setHeader("X-Omnia-Row-Count", String(exportResult.row_count));
+    response.setHeader("X-Omnia-Row-Limit", String(exportResult.row_limit));
+    response.setHeader("X-Omnia-Truncated", String(exportResult.truncated));
+
+    return exportResult.csv;
   }
 
   @Get("inventory-alerts")

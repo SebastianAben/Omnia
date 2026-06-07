@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiFetchText } from "@/lib/api-client";
 
 export type DashboardScope = "branch" | "central";
 
@@ -156,6 +156,44 @@ export function useAuditLogs(
     enabled: Boolean(token) && enabled,
     staleTime: 60_000,
   });
+}
+
+export async function downloadSalesSummaryCsv(
+  filters: DashboardFilters,
+  token?: string,
+) {
+  const params = new URLSearchParams();
+
+  if (filters.branchId) {
+    params.set("branch_id", filters.branchId);
+  }
+  if (filters.from) {
+    params.set("from", filters.from);
+  }
+  if (filters.to) {
+    params.set("to", filters.to);
+  }
+
+  const query = params.toString();
+  const result = await apiFetchText(
+    `/reports/sales-summary/export${query ? `?${query}` : ""}`,
+    { token },
+  );
+  const url = URL.createObjectURL(
+    new Blob([result.text], { type: "text/csv;charset=utf-8" }),
+  );
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = result.filename ?? "omnia-sales-summary.csv";
+  anchor.click();
+  URL.revokeObjectURL(url);
+
+  return {
+    rowCount: result.rowCount,
+    rowLimit: result.rowLimit,
+    truncated: result.truncated,
+  };
 }
 
 async function fetchDashboard(

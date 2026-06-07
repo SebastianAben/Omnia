@@ -7,6 +7,7 @@ import {
   BarChart3,
   Boxes,
   CreditCard,
+  Download,
   RefreshCcw,
   ShieldCheck,
   Store,
@@ -16,6 +17,7 @@ import { WorkspacePanel } from "@/components/app-shell";
 import {
   useAuditLogs,
   useDashboard,
+  downloadSalesSummaryCsv,
   type DashboardData,
   type DashboardFilters,
   type DashboardScope,
@@ -31,6 +33,9 @@ export function DashboardWorkspace() {
   const token = useAppState((state) => state.token);
   const [days, setDays] = useState("7");
   const [branchFilter, setBranchFilter] = useState("");
+  const [exportState, setExportState] = useState<
+    "idle" | "exporting" | "error" | "truncated"
+  >("idle");
   const scope: DashboardScope =
     role === "supervisor" ? "branch" : role === "cashier" ? "branch" : "central";
   const filters = useMemo<DashboardFilters>(() => {
@@ -105,7 +110,37 @@ export function DashboardWorkspace() {
           <RefreshCcw size={15} />
           Refresh
         </Button>
+        {role !== "cashier" ? (
+          <Button
+            className="h-9"
+            disabled={exportState === "exporting"}
+            onClick={() => {
+              setExportState("exporting");
+              void downloadSalesSummaryCsv(filters, token)
+                .then((result) =>
+                  setExportState(result.truncated ? "truncated" : "idle"),
+                )
+                .catch(() => setExportState("error"));
+            }}
+            type="button"
+            variant="secondary"
+          >
+            <Download size={15} />
+            {exportState === "exporting" ? "Exporting" : "Export CSV"}
+          </Button>
+        ) : null}
       </div>
+      {exportState === "error" ? (
+        <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          Export failed. Check access, filters, or backend availability.
+        </div>
+      ) : null}
+      {exportState === "truncated" ? (
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Export reached the 1,000-row limit. Narrow the period or branch filter
+          for a complete file.
+        </div>
+      ) : null}
 
       {dashboard.isLoading ? (
         <StatePanel label="Loading dashboard data..." />

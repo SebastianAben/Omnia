@@ -10,6 +10,38 @@ Omnia documentation has been reorganized into concise numbered documents under `
 
 ## Latest Completed Work
 
+- 2026-06-07: implemented ninth-phase reporting export completeness hardening on branch `feat/improvement`; no GitHub push performed.
+- Reviewed actual phase 9 state: phase is not explicitly defined and broad post-MVP expansion remains blocked by missing UAT feedback.
+- Improved bounded sales CSV export to query only one sentinel row beyond the 1,000-row limit and report whether the result was truncated.
+- Exposed truncation metadata through CORS and the desktop API client; dashboard now warns users to narrow filters when a downloaded export is incomplete.
+- 2026-06-07 09:32 +07: implemented eighth-phase post-MVP CSV hardening on branch `feat/improvement`; no GitHub push performed.
+- Reviewed actual phase 8 state: broad expansion is still blocked by missing UAT feedback; kept scope to safe reporting export improvement.
+- Improved CSV export helper to neutralize spreadsheet formula strings while preserving numeric values.
+- Hardened desktop CSV filename parsing for RFC 5987 `filename*` values and sanitized unsafe filename characters.
+- Validation passed: backend typecheck/lint/test:unit and desktop typecheck/lint.
+- 2026-06-07 09:27 +07: implemented seventh-phase post-MVP improvement on branch `feat/improvement`; no GitHub push performed.
+- Reviewed actual phase 7 state: UAT feedback is not recorded yet, so broad expansion is not accepted; chose the safest backlog item, basic reporting export.
+- Added bounded sales summary CSV export at `GET /api/v1/reports/sales-summary/export` with the same auth, central-access, date, and branch-scope rules as sales summary.
+- Added CSV escaping helper and unit coverage for comma, quote, and newline-safe export output.
+- Exposed CSV download response headers through CORS.
+- Added dashboard `Export CSV` action for non-cashier roles using existing report filters.
+- Updated API/status/roadmap docs for the new basic CSV export; XLSX remains backlog.
+- 2026-06-07 09:18 +07: implemented sixth-phase desktop/deployment readiness improvement on branch `feat/improvement`; no GitHub push performed.
+- Reviewed actual phase 6 state: Docker/server deploy config, static export desktop renderer, Electron bridge, and local SQLite schema already exist.
+- Chose improvement over keep: moved local SQLite DB path to Electron `userData` so packaged/runtime app writes to a stable writable OS location instead of app/build directory.
+- Hardened Electron production window defaults with sandbox, web security, CSP, blocked unexpected navigation, and sanitized external URL opening.
+- Added packaged schema lookup fallback through `process.resourcesPath` for future installer packaging.
+- Fixed desktop ESLint config to ignore generated static export output in `out/`.
+- 2026-06-07 08:43 +07: implemented fifth-phase release-candidate validation/improvement on branch `feat/improvement`; no GitHub push performed.
+- Reviewed actual phase 5 state: `pnpm typecheck` and `pnpm lint` pass; initial `pnpm build` failed in desktop Next standalone copy on Windows symlink EPERM.
+- Chose improvement over keep: switched desktop renderer build from Next standalone to static export because current renderer is client/API/Electron-bridge driven and Electron production was already using `loadFile`.
+- Updated Electron production loading to open `out/index.html` and replaced root server redirect with a static-compatible login page.
+- Added generated static export output to `.gitignore`.
+- Improved `scripts/smoke-mvp.ps1` with request timeout and clearer failed-request errors so release smoke fails fast when backend is unavailable.
+- Updated `docs/14-desktop-wrapper-readiness.md` to reflect the selected static export packaging path.
+- 2026-06-07 08:50 +07: started Docker Desktop for Omnia and ran project compose services; `omnia-postgres` and `omnia-redis` are healthy.
+- Applied backend Prisma migrations against Docker PostgreSQL; no pending migrations.
+- Ran backend seed successfully against Docker PostgreSQL.
 - 2026-06-07 08:33 +07: implemented fourth-phase frontend integration review/improvement on branch `feat/improvement`; push requested after phase 4.
 - Reviewed actual phase 4 state: dashboard API hooks, sync status panel, Shopee management workspace, AI insights workspace, and role-based navigation are already present.
 - Kept existing dashboard/Shopee/AI integration because it is aligned with the phase 4 goal.
@@ -80,10 +112,46 @@ Omnia documentation has been reorganized into concise numbered documents under `
 
 Latest validation:
 
+- Ninth-phase validation passed: backend typecheck/lint/build/test:unit, desktop typecheck/lint/build, and `git diff --check`.
+- `pnpm --filter @omnia/backend-api test:unit` passed after approved out-of-sandbox execution; sandbox attempt hit known `tsx`/esbuild `spawn EPERM`.
+- `pnpm --filter @omnia/backend-api typecheck` passed.
+- `pnpm --filter @omnia/backend-api lint` passed.
 - `pnpm --filter @omnia/desktop-app typecheck` passed.
 - `pnpm --filter @omnia/desktop-app lint` passed.
 
 Previous validation:
+
+- `pnpm --filter @omnia/backend-api typecheck` passed.
+- `pnpm --filter @omnia/backend-api lint` passed.
+- `pnpm --filter @omnia/backend-api test:unit` passed after approved out-of-sandbox execution; sandbox attempt hit known `tsx`/esbuild `spawn EPERM`.
+- `pnpm --filter @omnia/backend-api build` passed.
+- `pnpm --filter @omnia/desktop-app typecheck` passed.
+- `pnpm --filter @omnia/desktop-app lint` passed.
+- `pnpm --filter @omnia/desktop-app build` passed from local user-run output: Next compiled, generated 14 static pages, exported successfully, and `tsc -p tsconfig.electron.json` passed.
+
+Earlier validation:
+
+- `pnpm --filter @omnia/desktop-app typecheck` passed.
+- `pnpm --filter @omnia/desktop-app lint` passed after ignoring generated `out/`.
+- `pnpm --filter @omnia/desktop-app build` passed from local user-run output: Next compiled, generated 14 static pages, exported successfully, and `tsc -p tsconfig.electron.json` passed.
+
+Earlier validation:
+
+- `pnpm typecheck` passed after approved out-of-sandbox execution.
+- `pnpm lint` passed after approved out-of-sandbox execution.
+- `pnpm build` passed after switching desktop renderer to static export.
+- `pnpm smoke:mvp` failed fast because `GET http://localhost:4000/api/v1/health` could not connect; backend was not running.
+- `docker compose ps` failed because Docker Desktop/Linux engine pipe was unavailable, so PostgreSQL/Redis runtime smoke prerequisites were not active.
+- After starting Docker Desktop out of sandbox, `docker compose up -d` passed and both services became healthy.
+- `pnpm prisma:migrate:deploy` passed with no pending migrations.
+- `pnpm prisma:seed` passed.
+
+Earlier validation:
+
+- `pnpm --filter @omnia/desktop-app typecheck` passed.
+- `pnpm --filter @omnia/desktop-app lint` passed.
+
+Earlier validation:
 
 - `pnpm --filter @omnia/desktop-app typecheck` passed.
 - `pnpm --filter @omnia/desktop-app lint` passed.
@@ -138,8 +206,12 @@ Automated tests were not run because no application code changed.
 - Latest phase 2 consistency checks are unit-tested but still not DB-backed integration-tested.
 - `docs/` is currently untracked in git status from prior documentation restructuring.
 - Future agents must update this file after each meaningful session.
-- Production Electron packaging still needs runtime validation; current code has Electron shell and bridge, but final package strategy must be tested.
+- Production Electron packaging strategy is now static export, but packaged Electron runtime still needs validation on target machine.
+- Electron now stores local SQLite under `app.getPath("userData")`; existing dev DB under app `.omnia/` is not automatically migrated.
+- Full `pnpm smoke:mvp` is now blocked only until backend is running on `localhost:4000`; PostgreSQL and Redis Docker services are healthy.
+- Sales summary CSV export is basic and bounded to 1000 latest matching transactions; XLSX and large async export are still backlog.
+- Export truncation is now visible, but exports above 1,000 rows still require narrower filters until an accepted async/large-export scope exists.
 
 ## Next Recommended Step
 
-Run DB-backed sync integration/smoke validation for valid transaction bundle persistence, duplicate replay, rejected malformed bundles, and stock movement balance updates.
+Run production Electron runtime/package smoke on target machine, start backend on `localhost:4000`, rerun `pnpm smoke:mvp`, then validate CSV export against seeded data from the dashboard.

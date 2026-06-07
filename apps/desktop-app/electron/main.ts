@@ -12,6 +12,7 @@ const supportedReplayEventTypes = [
   "shift.closed",
   "stock_movement.created",
 ] as const;
+const allowedExternalProtocols = new Set(["http:", "https:"]);
 
 type SyncStatus = "pending" | "queued" | "synced" | "failed" | "conflict";
 type LocalSourceMode = "online" | "offline";
@@ -110,9 +111,20 @@ const sqlValue = (value: string | number | null | undefined) => {
 
 const getDesktopRoot = () => path.join(__dirname, "..");
 const getLocalDbPath = () =>
-  path.join(getDesktopRoot(), ".omnia", "omnia-local.db");
-const getLocalSchemaPath = () =>
-  path.join(getDesktopRoot(), "local-store", "schema.sql");
+  path.join(app.getPath("userData"), "omnia-local.db");
+const getLocalSchemaPath = () => {
+  const candidatePaths = [
+    path.join(getDesktopRoot(), "local-store", "schema.sql"),
+    path.join(process.resourcesPath, "local-store", "schema.sql"),
+  ];
+  const schemaPath = candidatePaths.find((candidate) => fs.existsSync(candidate));
+
+  if (!schemaPath) {
+    throw new Error("Local SQLite schema file is missing from the app bundle.");
+  }
+
+  return schemaPath;
+};
 
 function runSql(sql: string) {
   ensureLocalStore();
@@ -863,21 +875,55 @@ function createMainWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
   });
 
+  mainWindow.webContents.session.webRequest.onHeadersReceived(
+    (details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          "Content-Security-Policy": [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:*;",
+          ],
+        },
+      });
+    },
+  );
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const allowedUrl = isDev ? devServerUrl : "file://";
+
+    if (!url.startsWith(allowedUrl)) {
+      event.preventDefault();
+    }
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
+
     return { action: "deny" };
   });
 
   if (isDev) {
     void mainWindow.loadURL(devServerUrl);
   } else {
-    void mainWindow.loadFile(
-      path.join(__dirname, "../.next/server/app/index.html"),
-    );
+    void mainWindow.loadFile(path.join(__dirname, "../out/index.html"));
+  }
+}
+
+function isSafeExternalUrl(url: string) {
+  try {
+    const parsedUrl = new URL(url);
+
+    return allowedExternalProtocols.has(parsedUrl.protocol);
+  } catch {
+    return false;
   }
 }
 

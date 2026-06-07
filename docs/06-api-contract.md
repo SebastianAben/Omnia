@@ -68,6 +68,7 @@ MVP memakai bearer token. Production perlu JWT library/config yang kuat.
 | GET | `/dashboard/branch` | KPI cabang. |
 | GET | `/dashboard/central` | KPI pusat. |
 | GET | `/reports/sales-summary` | Sales summary. |
+| GET | `/reports/sales-summary/export` | Export sales summary CSV terbatas sesuai filter; header `X-Omnia-Truncated` menandai hasil terpotong. |
 | GET | `/reports/inventory-alerts` | Inventory alerts. |
 | GET | `/audit/logs` | Audit log. |
 | GET | `/monitoring/branches/sync-health` | Branch sync health. |
@@ -100,4 +101,3 @@ MVP memakai bearer token. Production perlu JWT library/config yang kuat.
 - Supervisor: cashier flow, inventory adjustment, dashboard cabang, audit cabang.
 - HQ Admin: central dashboard, master data, Shopee, monitoring, audit.
 - Executive/Analyst: central dashboard dan AI insight.
-

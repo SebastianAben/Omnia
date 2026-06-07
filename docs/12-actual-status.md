@@ -17,7 +17,7 @@ Backend:
 - Sync events dan transaction bundles.
 - Sync jobs/logs.
 - Dashboard branch/central.
-- Reports sales summary dan inventory alerts.
+- Reports sales summary, bounded CSV export dengan proteksi formula dan peringatan truncation, serta inventory alerts.
 - Audit logs.
 - Monitoring branch sync health dan Shopee health.
 - Shopee store, SKU mapping, order import, webhook, retry job.

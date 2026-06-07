@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.seed.json --noEmit",
-    "test:unit": "tsx src/auth/access-scope.test.ts && tsx src/sync/sync.service.test.ts",
+    "test:unit": "tsx src/auth/access-scope.test.ts && tsx src/reports/csv.test.ts && tsx src/sync/sync.service.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.seed.json --noEmit",
     "db:migrate:local": "psql ${DATABASE_URL:-postgresql://omnia:omnia@localhost:55433/omnia} -f prisma/migrations/20260505023000_init/migration.sql",
     "db:migrate:sprint5": "psql ${DATABASE_URL:-postgresql://omnia:omnia@localhost:55433/omnia} -f prisma/migrations/20260505090000_sprint5_shopee_integration/migration.sql",

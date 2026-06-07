@@ -42,9 +42,9 @@ Sudah ada:
 Catatan penting:
 
 - Mode development memakai `next dev` lalu Electron membuka `http://localhost:3000`.
-- Mode production belum boleh dianggap selesai sampai strategi packaging Next.js + Electron divalidasi.
-- `next.config.mjs` saat ini memakai `output: "standalone"`, sehingga packaging harus menjalankan server standalone atau mengubah strategi menjadi static export jika semua route kompatibel.
-- Electron `main.ts` saat ini mencoba `loadFile` ke output `.next`; ini perlu diverifikasi karena Next standalone tidak otomatis menghasilkan HTML statis untuk semua App Router route.
+- Mode production memakai static export renderer dan Electron membuka `out/index.html`.
+- Build desktop belum boleh dianggap selesai untuk distribusi cabang sampai packaged app tervalidasi di mesin target.
+- `next.config.mjs` memakai `output: "export"` karena route renderer saat ini client/API/Electron-bridge driven dan tidak membutuhkan Next server runtime.
 
 ## Strategi Packaging yang Direkomendasikan
 
@@ -93,7 +93,7 @@ Risiko:
 
 - Tidak semua fitur Next App Router/server feature kompatibel.
 
-Rekomendasi MVP: mulai dengan Opsi A karena project saat ini sudah memakai `output: "standalone"`. Evaluasi Opsi B hanya jika UI memang sepenuhnya client-side.
+Rekomendasi MVP: gunakan Opsi B untuk renderer saat ini. Evaluasi Opsi A hanya jika fitur baru membutuhkan Next server runtime.
 
 ## SQLite Requirement
 
