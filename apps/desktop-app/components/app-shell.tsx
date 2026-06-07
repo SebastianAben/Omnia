@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ComponentType, ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { Badge, Button, cn } from "@omnia/ui";
 import {
   BarChart3,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { roleLabels, type OmniaRole, useAppState } from "@/lib/app-state";
 import { StatusBar } from "@/components/status-bar";
+import { logoutSession } from "@/features/auth/auth-service";
 
 const navByRole: Record<
   OmniaRole,
@@ -57,8 +58,22 @@ const navByRole: Record<
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { role, setRole } = useAppState();
+  const router = useRouter();
+  const { role, setRole, token } = useAppState();
+  const [isSigningOut, setSigningOut] = useState(false);
   const navItems = navByRole[role];
+
+  const signOut = async () => {
+    setSigningOut(true);
+    try {
+      await logoutSession();
+    } catch {
+      // Local credentials are cleared before remote revocation is attempted.
+    } finally {
+      router.replace("/login");
+      setSigningOut(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-slate-100">
@@ -110,6 +125,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {roleLabels[item]}
               </Button>
             ))}
+            {token ? (
+              <Button
+                className="mt-2 h-8 justify-start px-2 text-xs"
+                disabled={isSigningOut}
+                onClick={() => void signOut()}
+                type="button"
+                variant="secondary"
+              >
+                {isSigningOut ? "Signing out..." : "Sign out"}
+              </Button>
+            ) : null}
           </div>
         </div>
       </aside>

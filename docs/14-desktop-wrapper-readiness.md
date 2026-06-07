@@ -33,7 +33,9 @@ Sudah ada:
 - `apps/desktop-app/electron/main.ts`
 - `apps/desktop-app/electron/preload.ts`
 - `apps/desktop-app/electron/preload.d.ts`
+- encrypted auth session store berbasis Electron `safeStorage`
 - `window.omniaDesktop.localStore`
+- `window.omniaDesktop.authSession`
 - IPC handler untuk checkout, receipt list, inventory, shift, sync queue, dan replay sync
 - SQLite local schema di `apps/desktop-app/local-store/schema.sql`
 - Script `dev:desktop`
@@ -106,6 +108,16 @@ Checklist:
 - SQLite binary/dependency tersedia dalam installer.
 - Renderer hanya memanggil local store melalui `window.omniaDesktop.localStore`.
 - Browser biasa harus menampilkan fallback jelas jika bridge tidak tersedia.
+
+## Auth Session Requirement
+
+- Electron main process memiliki ownership atas persisted token.
+- Access dan refresh token dienkripsi dengan OS-backed Electron `safeStorage`.
+- Renderer hanya memakai `window.omniaDesktop.authSession`.
+- Token `localStorage` lama dimigrasikan lalu dihapus saat bridge tersedia.
+- Jika secure storage tidak tersedia, token hanya bertahan di memory dan login
+  tidak dipersistenkan.
+- Browser fallback juga menggunakan token memory-only.
 
 Catatan aktual: implementasi saat ini memakai command `sqlite3` melalui `execFileSync`. Untuk installer production, pastikan binary `sqlite3` tersedia di target machine atau ganti ke dependency SQLite yang dibundel seperti `better-sqlite3`/native package yang kompatibel dengan Electron.
 

@@ -35,6 +35,17 @@ Field minimum:
 - `occurred_at`
 - `payload`
 
+`source_mode` yang dikirim ke backend memakai `online` atau
+`offline_replay`. Status koneksi lokal `offline` harus dinormalisasi menjadi
+`offline_replay` saat envelope disimpan.
+
+Untuk event shift:
+
+- `produced_by_user_id` harus sama dengan bearer user.
+- Satu register hanya boleh memiliki satu shift `OPEN`.
+- Close hanya valid untuk shift lokal/pusat yang masih `OPEN`.
+- Duplicate event ID dikembalikan sebagai hasil idempotent.
+
 ## Transaction Bundle
 
 Bundle transaksi harus berisi:
@@ -46,6 +57,16 @@ Bundle transaksi harus berisi:
 - local metadata
 
 Backend harus memproses bundle dalam satu alur logis dan menulis sync job/log/audit.
+
+Validasi minimum bundle:
+
+- cashier, register, branch, product, dan shift harus aktif serta konsisten
+- waktu transaksi harus berada dalam rentang shift
+- total header harus sama dengan agregasi item dan diskon
+- pembayaran `paid` harus mencukupi total transaksi
+- actor dan source ID stock movement harus cocok dengan transaksi
+- agregasi kuantitas movement penjualan harus sama dengan item
+- saldo stok pusat tidak boleh menjadi negatif
 
 ## Idempotency
 
@@ -64,6 +85,13 @@ Cabang:
 2. Jika gagal, status tetap pending/failed dengan retry metadata.
 3. Saat online, queue direplay berdasarkan prioritas dan waktu.
 4. Error disimpan untuk UI sync status.
+
+Retry lokal:
+
+- replay hanya mengambil event due (`next_retry_at` kosong atau sudah lewat)
+- batch replay dibatasi agar checkout tetap responsif
+- failed replay memakai backoff dan menyimpan error terakhir
+- queued event yang macet dipulihkan ke failed agar tidak hilang diam-diam
 
 Pusat:
 
@@ -95,4 +123,3 @@ Minimum metrics:
 - duplicate event count
 - branch offline duration
 - integration job failures
-

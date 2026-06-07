@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Headers,
   Inject,
@@ -30,6 +31,21 @@ function readBranchId(body: unknown): string | undefined {
   return typeof branchId === "string" ? branchId : undefined;
 }
 
+function assertProducedByUser(user: CurrentUser, body: unknown): void {
+  if (!body || typeof body !== "object") {
+    return;
+  }
+
+  const producedByUserId = (body as { produced_by_user_id?: unknown })
+    .produced_by_user_id;
+  if (
+    typeof producedByUserId === "string" &&
+    producedByUserId !== user.id
+  ) {
+    throw new ForbiddenException("produced_by_user_id must match bearer user");
+  }
+}
+
 @ApiTags("sync")
 @Controller("sync")
 export class SyncController {
@@ -45,6 +61,7 @@ export class SyncController {
     @Headers("idempotency-key") idempotencyKey?: string,
   ) {
     resolveBranchScope(request.user, dto.branch_id);
+    assertProducedByUser(request.user, dto);
     return this.syncService.receiveEvent(dto, idempotencyKey);
   }
 
@@ -58,6 +75,7 @@ export class SyncController {
     @Headers("idempotency-key") idempotencyKey?: string,
   ) {
     resolveBranchScope(request.user, readBranchId(body));
+    assertProducedByUser(request.user, body);
     return this.syncService.receiveBundle(body, idempotencyKey);
   }
 

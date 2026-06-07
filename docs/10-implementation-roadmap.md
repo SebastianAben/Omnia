@@ -5,10 +5,10 @@
 | Sprint | Fokus | Status |
 | --- | --- | --- |
 | 0 | Foundation | Selesai. |
-| 1 | Backend API dan Prisma foundation | Selesai MVP, perlu hardening auth. |
+| 1 | Backend API dan Prisma foundation | Selesai MVP; access token dan refresh session sudah di-hardening. |
 | 2 | Local data dan hybrid sync backend | Selesai MVP, conflict resolver masih dasar. |
 | 3 | Frontend POS desktop | Selesai MVP, UI belum final. |
-| 4 | Dashboard, reporting, audit | Selesai read-only. |
+| 4 | Dashboard, reporting, audit | Selesai read-only; filter tanggal tervalidasi. |
 | 5 | Shopee integration | Terimplementasi mock/sandbox-ready. |
 | 6 | AI analytics dasar | Terimplementasi advisory. |
 | 7 | MVP release readiness | Artifact siap, perlu runtime validation penuh. |

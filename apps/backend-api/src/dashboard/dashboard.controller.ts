@@ -14,6 +14,11 @@ import {
 } from "../auth/access-scope";
 import type { CurrentUser } from "../auth/dto";
 import { AuthGuard } from "../auth/guards/auth.guard";
+import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import {
+  type ReportQuery,
+  reportQuerySchema,
+} from "../reporting/reporting-query";
 import { DashboardService } from "./dashboard.service";
 
 type RequestWithUser = {
@@ -31,14 +36,11 @@ export class DashboardController {
   @ApiOkResponse({ description: "Branch operations dashboard." })
   branchDashboard(
     @Req() request: RequestWithUser,
-    @Query("branch_id") branchId?: string,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
+    @Query(new ZodValidationPipe(reportQuerySchema)) query: ReportQuery,
   ) {
     return this.dashboardService.branchDashboard({
-      branch_id: requireBranchScope(request.user, branchId),
-      from,
-      to,
+      ...query,
+      branch_id: requireBranchScope(request.user, query.branch_id),
     });
   }
 
@@ -46,16 +48,13 @@ export class DashboardController {
   @ApiOkResponse({ description: "Central dashboard for HQ and analyst roles." })
   centralDashboard(
     @Req() request: RequestWithUser,
-    @Query("branch_id") branchId?: string,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
+    @Query(new ZodValidationPipe(reportQuerySchema)) query: ReportQuery,
   ) {
     assertCentralAccess(request.user);
 
     return this.dashboardService.centralDashboard({
-      branch_id: resolveBranchScope(request.user, branchId),
-      from,
-      to,
+      ...query,
+      branch_id: resolveBranchScope(request.user, query.branch_id),
     });
   }
 }

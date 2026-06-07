@@ -11,6 +11,11 @@ import { ApiBearerAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 import { assertCentralAccess, resolveBranchScope } from "../auth/access-scope";
 import type { CurrentUser } from "../auth/dto";
 import { AuthGuard } from "../auth/guards/auth.guard";
+import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import {
+  type ReportQuery,
+  reportQuerySchema,
+} from "../reporting/reporting-query";
 import { ReportsService } from "./reports.service";
 
 type RequestWithUser = {
@@ -32,16 +37,13 @@ export class ReportsController {
   @ApiOkResponse({ description: "Sales KPI summary with branch/date filters." })
   salesSummary(
     @Req() request: RequestWithUser,
-    @Query("branch_id") branchId?: string,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
+    @Query(new ZodValidationPipe(reportQuerySchema)) query: ReportQuery,
   ) {
     assertCentralAccess(request.user);
 
     return this.reportsService.salesSummary({
-      branch_id: resolveBranchScope(request.user, branchId),
-      from,
-      to,
+      ...query,
+      branch_id: resolveBranchScope(request.user, query.branch_id),
     });
   }
 
@@ -50,16 +52,13 @@ export class ReportsController {
   async salesSummaryExport(
     @Req() request: RequestWithUser,
     @Res({ passthrough: true }) response: HeaderResponse,
-    @Query("branch_id") branchId?: string,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
+    @Query(new ZodValidationPipe(reportQuerySchema)) query: ReportQuery,
   ) {
     assertCentralAccess(request.user);
 
     const exportResult = await this.reportsService.salesSummaryCsv({
-      branch_id: resolveBranchScope(request.user, branchId),
-      from,
-      to,
+      ...query,
+      branch_id: resolveBranchScope(request.user, query.branch_id),
     });
 
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -79,10 +78,10 @@ export class ReportsController {
   @ApiOkResponse({ description: "Products at or below minimum stock threshold." })
   inventoryAlerts(
     @Req() request: RequestWithUser,
-    @Query("branch_id") branchId?: string,
+    @Query(new ZodValidationPipe(reportQuerySchema)) query: ReportQuery,
   ) {
     return this.reportsService.inventoryAlerts({
-      branch_id: resolveBranchScope(request.user, branchId),
+      branch_id: resolveBranchScope(request.user, query.branch_id),
     });
   }
 }

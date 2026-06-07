@@ -11,7 +11,13 @@ import { ApiBearerAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { AuthService } from "./auth.service";
-import { CurrentUser, LoginDto, loginSchema } from "./dto";
+import {
+  CurrentUser,
+  LoginDto,
+  loginSchema,
+  RefreshSessionDto,
+  refreshSessionSchema,
+} from "./dto";
 import { AuthGuard } from "./guards/auth.guard";
 
 type AuthenticatedRequest = Request & {
@@ -27,6 +33,24 @@ export class AuthController {
   @ApiOkResponse({ description: "Login response with bearer token." })
   login(@Body(new ZodValidationPipe(loginSchema)) dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post("refresh")
+  @ApiOkResponse({ description: "Rotated access and refresh tokens." })
+  refresh(
+    @Body(new ZodValidationPipe(refreshSessionSchema))
+    dto: RefreshSessionDto,
+  ) {
+    return this.authService.refreshSession(dto);
+  }
+
+  @Post("logout")
+  @ApiOkResponse({ description: "Revokes the supplied refresh session." })
+  logout(
+    @Body(new ZodValidationPipe(refreshSessionSchema))
+    dto: RefreshSessionDto,
+  ) {
+    return this.authService.logout(dto);
   }
 
   @Get("me")

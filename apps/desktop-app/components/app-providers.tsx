@@ -3,7 +3,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { restoreSession } from "@/features/auth/auth-service";
+import {
+  configureAuthRefresh,
+  restoreSession,
+} from "@/features/auth/auth-service";
 import { useAppState } from "@/lib/app-state";
 
 export function AppProviders({ children }: { children: ReactNode }) {
@@ -21,6 +24,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    configureAuthRefresh();
     void restoreSession()
       .then((session) => {
         if (session) {

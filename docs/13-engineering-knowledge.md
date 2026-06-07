@@ -83,6 +83,13 @@ Aturan:
 - Endpoint read-heavy dashboard/report harus read-only dan tidak memicu side effect.
 - Endpoint sync/webhook harus idempotent.
 
+Untuk auth session:
+
+- Access token dibuat pendek dan tetap stateless pada request path.
+- Refresh token bersifat opaque dan hanya hash ber-secret yang disimpan.
+- Rotasi refresh token harus atomik dan token lama hanya boleh dipakai sekali.
+- Logout mencabut refresh session; access token lama berakhir lewat expiry pendek.
+
 Jika endpoint mulai lambat:
 
 1. Tambahkan pagination/limit.
@@ -151,6 +158,18 @@ Jika UI lambat:
 3. Paginate/filter data.
 4. Split component besar.
 5. Hindari state global untuk state yang hanya dipakai lokal.
+
+## Desktop Credential Storage
+
+- Access dan refresh token Electron tidak boleh disimpan plaintext di
+  `localStorage`.
+- Renderer hanya mengakses session store melalui preload bridge yang sempit.
+- Main process mengenkripsi token dengan Electron `safeStorage` sebelum menulis
+  file di `app.getPath("userData")`.
+- Jika enkripsi OS tidak tersedia, simpan token hanya di memory untuk session
+  aktif dan jangan downgrade ke file plaintext.
+- Browser fallback menyimpan token hanya di memory; token legacy di browser
+  storage dibaca sekali lalu dihapus.
 
 ## Clean Code Rules
 

@@ -36,6 +36,7 @@ export type LocalSyncQueueRecord = {
   status: LocalTransactionRecord["syncStatus"];
   attemptCount: number;
   createdAt: string;
+  nextRetryAt?: string;
   lastErrorCode?: string;
   lastErrorMessage?: string;
 };
@@ -67,6 +68,15 @@ export type LocalStockMovementRecord = {
 };
 
 export type LocalSourceMode = "online" | "offline";
+export type LocalActiveShift = {
+  id: string;
+  branchId: string;
+  registerId: string;
+  openedAt: string;
+  openingCashAmount: number;
+  status: "open";
+  syncStatus: LocalTransactionRecord["syncStatus"];
+};
 
 type LocalStoreBridge = {
   saveCheckout: (input: unknown) => Promise<{
@@ -90,11 +100,16 @@ type LocalStoreBridge = {
     synced: number;
     failed: number;
     conflict: number;
+    deferred: number;
   }>;
   saveShiftEvent: (input: unknown) => Promise<{
     shiftId: string;
     eventId: string;
   }>;
+  getActiveShift: (input: {
+    branchId: string;
+    registerId: string;
+  }) => Promise<LocalActiveShift | null>;
 };
 
 const requireLocalStore = () => {
@@ -200,4 +215,11 @@ export async function saveShiftEvent(input: {
     ...input,
     sourceMode: getLocalSourceMode(),
   });
+}
+
+export async function getLocalActiveShift(
+  branchId: string,
+  registerId: string,
+) {
+  return requireLocalStore().getActiveShift({ branchId, registerId });
 }

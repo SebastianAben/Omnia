@@ -100,6 +100,8 @@ const validStockMovementEvent = {
       source_id: "adjustment-1",
       movement_type: "adjustment_plus" as const,
       quantity_delta: 1,
+      quantity_before: 5,
+      quantity_after: 6,
       reason_code: "manual_adjustment",
       performed_by_user_id: "cashier-1",
       movement_at: "2026-06-07T00:00:00.000Z",
@@ -120,6 +122,28 @@ test("SyncController rejects branch users replaying another branch bundle", () =
       controller.receiveBundle(
         { user: branchUser },
         { ...validBundle, branch_id: "branch-b" },
+      ),
+    ForbiddenException,
+  );
+  assert.equal(called, false);
+});
+
+test("SyncController rejects events produced as another user", () => {
+  let called = false;
+  const controller = new SyncController({
+    receiveEvent: () => {
+      called = true;
+    },
+  } as unknown as SyncService);
+
+  assert.throws(
+    () =>
+      controller.receiveEvent(
+        { user: branchUser },
+        {
+          ...validStockMovementEvent,
+          produced_by_user_id: "another-user",
+        },
       ),
     ForbiddenException,
   );
@@ -301,6 +325,106 @@ test("SyncService rejects invalid standalone stock movement direction", async ()
   assert.equal(transactionCalled, false);
 });
 
+test("SyncService rejects standalone movement when central stock would be negative", async () => {
+  let movementCreated = false;
+  const service = new SyncService(
+    {
+      enqueueSyncEvent: async () => "queue-job-1",
+    } as never,
+    {
+      syncLog: {
+        findFirst: async () => null,
+      },
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          branch: { findUnique: async () => ({ id: "branch-a" }) },
+          product: { findUnique: async () => ({ id: "product-1" }) },
+          user: { findMany: async () => [{ id: "cashier-1" }] },
+          syncJob: {
+            create: async () => ({ id: "sync-job-1" }),
+          },
+          stockMovement: {
+            findUnique: async () => null,
+            create: async () => {
+              movementCreated = true;
+            },
+          },
+          inventoryBalance: {
+            upsert: async () => ({ quantityOnHand: 1 }),
+          },
+        }),
+    } as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.receiveEvent({
+        ...validStockMovementEvent,
+        payload: {
+          stock_movement: {
+            ...validStockMovementEvent.payload.stock_movement,
+            movement_type: "adjustment_minus",
+            quantity_delta: -2,
+            quantity_before: 1,
+            quantity_after: -1,
+          },
+        },
+      }),
+    BadRequestException,
+  );
+
+  assert.equal(movementCreated, false);
+});
+
+test("SyncService rejects standalone movement with inconsistent balance snapshot", async () => {
+  let movementCreated = false;
+  const service = new SyncService(
+    {
+      enqueueSyncEvent: async () => "queue-job-1",
+    } as never,
+    {
+      syncLog: {
+        findFirst: async () => null,
+      },
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          branch: { findUnique: async () => ({ id: "branch-a" }) },
+          product: { findUnique: async () => ({ id: "product-1" }) },
+          user: { findMany: async () => [{ id: "cashier-1" }] },
+          syncJob: {
+            create: async () => ({ id: "sync-job-1" }),
+          },
+          stockMovement: {
+            findUnique: async () => null,
+            create: async () => {
+              movementCreated = true;
+            },
+          },
+          inventoryBalance: {
+            upsert: async () => ({ quantityOnHand: 5 }),
+          },
+        }),
+    } as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.receiveEvent({
+        ...validStockMovementEvent,
+        payload: {
+          stock_movement: {
+            ...validStockMovementEvent.payload.stock_movement,
+            quantity_before: 5,
+            quantity_after: 9,
+          },
+        },
+      }),
+    BadRequestException,
+  );
+
+  assert.equal(movementCreated, false);
+});
+
 test("SyncService rejects invalid sale stock movement direction", async () => {
   let transactionCalled = false;
   const service = new SyncService(
@@ -330,6 +454,70 @@ test("SyncService rejects invalid sale stock movement direction", async () => {
             },
           ],
         },
+      }),
+    BadRequestException,
+  );
+
+  assert.equal(transactionCalled, false);
+});
+
+test("SyncService rejects sale movements that do not match item quantities", async () => {
+  let transactionCalled = false;
+  const service = new SyncService(
+    {
+      enqueueSyncBundle: async () => "queue-job-1",
+    } as never,
+    {
+      syncLog: {
+        findFirst: async () => null,
+      },
+      $transaction: async () => {
+        transactionCalled = true;
+      },
+    } as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.receiveBundle({
+        ...validBundle,
+        payload: {
+          ...validBundle.payload,
+          stock_movements: [
+            {
+              ...validBundle.payload.stock_movements[0],
+              quantity_delta: -2,
+            },
+          ],
+        },
+      }),
+    BadRequestException,
+  );
+
+  assert.equal(transactionCalled, false);
+});
+
+test("SyncService rejects bundle actor that differs from cashier", async () => {
+  let transactionCalled = false;
+  const service = new SyncService(
+    {
+      enqueueSyncBundle: async () => "queue-job-1",
+    } as never,
+    {
+      syncLog: {
+        findFirst: async () => null,
+      },
+      $transaction: async () => {
+        transactionCalled = true;
+      },
+    } as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.receiveBundle({
+        ...validBundle,
+        produced_by_user_id: "another-user",
       }),
     BadRequestException,
   );

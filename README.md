@@ -70,7 +70,6 @@ docker compose up -d postgres redis
 
 ```bash
 pnpm --filter @omnia/backend-api db:migrate:local
-pnpm --filter @omnia/backend-api db:migrate:sprint5 # only needed for an existing DB created before Sprint 5
 pnpm --filter @omnia/backend-api prisma:seed
 pnpm --filter @omnia/desktop-app localdb:init
 ```

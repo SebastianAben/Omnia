@@ -1,10 +1,18 @@
 import { z } from "zod";
 
-export const reportQuerySchema = z.object({
-  branch_id: z.string().trim().min(1).optional(),
-  from: z.string().datetime().optional(),
-  to: z.string().datetime().optional(),
-});
+export const reportQuerySchema = z
+  .object({
+    branch_id: z.string().trim().min(1).optional(),
+    from: z.string().datetime({ offset: true }).optional(),
+    to: z.string().datetime({ offset: true }).optional(),
+  })
+  .refine(
+    ({ from, to }) => !from || !to || new Date(from) <= new Date(to),
+    {
+      message: "`from` must be earlier than or equal to `to`",
+      path: ["from"],
+    },
+  );
 
 export type ReportQuery = z.infer<typeof reportQuerySchema>;
 
@@ -37,4 +45,3 @@ export function toNumber(value: { toString(): string } | number | null | undefin
 
   return typeof value === "number" ? value : Number(value.toString());
 }
-

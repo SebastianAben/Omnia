@@ -33,6 +33,7 @@ export function PosWorkspace() {
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const [isCheckingOut, setCheckingOut] = useState(false);
   const branch = useAppState((state) => state.branch);
+  const token = useAppState((state) => state.token);
   const register = useAppState((state) => state.register);
   const user = useAppState((state) => state.user);
   const activeShiftId = useAppState((state) => state.activeShiftId);
@@ -54,12 +55,16 @@ export function PosWorkspace() {
   const setAmountReceived = useCartStore((state) => state.setAmountReceived);
 
   const catalogQuery = useQuery({
-    queryKey: ["pos-catalog", branch.id],
-    queryFn: () => loadPosCatalog(branch.id),
+    queryKey: ["pos-catalog", branch.id, token],
+    queryFn: () => loadPosCatalog(branch.id, token!),
+    enabled: Boolean(token),
     retry: 1,
   });
 
-  const products = catalogQuery.data ?? loadFallbackCatalog();
+  const products = useMemo(
+    () => (token ? catalogQuery.data ?? [] : loadFallbackCatalog()),
+    [catalogQuery.data, token],
+  );
   const filteredProducts = useMemo(
     () => filterCatalog(products, query),
     [products, query],
@@ -119,7 +124,13 @@ export function PosWorkspace() {
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
       <WorkspacePanel
-        badge={catalogQuery.isError ? "Demo cache" : "API first"}
+        badge={
+          token
+            ? catalogQuery.isError
+              ? "Catalog unavailable"
+              : "API catalog"
+            : "Demo catalog"
+        }
         description="Fast cashier workspace with product lookup, local cart state, payment confirmation, and checkout queue write."
         title="POS Checkout"
       >
@@ -139,6 +150,17 @@ export function PosWorkspace() {
           </label>
 
           <div className="grid gap-2">
+            {token && catalogQuery.isLoading ? (
+              <CatalogState message="Loading branch catalog..." />
+            ) : null}
+            {token && catalogQuery.isError ? (
+              <CatalogState message="Branch catalog is unavailable. Checkout is disabled until valid master data is loaded." />
+            ) : null}
+            {!catalogQuery.isLoading &&
+            !catalogQuery.isError &&
+            filteredProducts.length === 0 ? (
+              <CatalogState message="No priced product matches this branch and search." />
+            ) : null}
             {filteredProducts.map((product) => {
               const isLowStock = product.stockOnHand <= product.minimumQuantity;
 
@@ -357,6 +379,14 @@ export function PosWorkspace() {
           </div>
         ) : null}
       </aside>
+    </div>
+  );
+}
+
+function CatalogState({ message }: { message: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
+      {message}
     </div>
   );
 }

@@ -43,10 +43,13 @@ export interface AppActions {
   setPendingSyncCount: (pendingSyncCount: number) => void;
   setShiftStatus: (shiftStatus: ShiftStatus) => void;
   setActiveShiftId: (activeShiftId?: string) => void;
+  setToken: (token?: string) => void;
   setSession: (session: {
     token?: string;
     user: SessionUser;
     branch?: BranchContext;
+    register?: RegisterContext;
+    activeShiftId?: string;
   }) => void;
 }
 
@@ -125,12 +128,16 @@ export const useAppState = create<AppStore>()(
     setPendingSyncCount: (pendingSyncCount) => set({ pendingSyncCount }),
     setShiftStatus: (shiftStatus) => set({ shiftStatus }),
     setActiveShiftId: (activeShiftId) => set({ activeShiftId }),
-    setSession: ({ token, user, branch }) =>
+    setToken: (token) => set({ token }),
+    setSession: ({ token, user, branch, register, activeShiftId }) =>
       set((state) => ({
         token,
         user,
         role: user.role,
         branch: branch ?? state.branch,
+        register: register ?? state.register,
+        activeShiftId,
+        shiftStatus: activeShiftId ? "open" : "closed",
       })),
   })),
 );

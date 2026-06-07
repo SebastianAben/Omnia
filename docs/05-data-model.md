@@ -6,7 +6,7 @@ Data model Omnia dibagi berdasarkan domain operasional. Implementasi aktual mema
 
 | Domain | Entitas |
 | --- | --- |
-| Access | `Role`, `User` |
+| Access | `Role`, `User`, `AuthSession` |
 | Branch | `Branch`, `Register`, `Shift` |
 | Product | `Category`, `Product`, `ProductVariant`, `BranchProductPrice` |
 | Inventory | `InventoryBalance`, `StockMovement` |
@@ -20,6 +20,7 @@ Data model Omnia dibagi berdasarkan domain operasional. Implementasi aktual mema
 ## Relasi Penting
 
 - User memiliki role dan branch utama.
+- User memiliki refresh session yang dapat dirotasi dan dicabut per device.
 - Branch memiliki register, shift, inventory balance, price, dan transaksi.
 - Product memiliki category, variant, branch price, inventory balance, dan stock movement.
 - Sales transaction memiliki item dan payment.
@@ -33,6 +34,8 @@ Data model Omnia dibagi berdasarkan domain operasional. Implementasi aktual mema
 
 - Transaksi POS yang sudah dikonfirmasi lokal dianggap final secara operasional.
 - Inventory balance adalah status; stock movement adalah sumber perubahan.
+- Stock movement harus konsisten dengan `quantity_before`, `quantity_delta`,
+  dan `quantity_after`; mutation yang membuat stok negatif ditolak.
 - Tidak ada retur/refund kompleks pada MVP.
 - Payment dicatat manual; belum ada payment gateway langsung.
 - Sync harus idempotent agar replay tidak menggandakan data.
@@ -50,4 +53,3 @@ SQLite lokal menyimpan data minimum untuk cabang:
 - inventory balance/cache
 - sync queue
 - cache master data minimum
-

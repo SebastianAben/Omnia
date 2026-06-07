@@ -12,6 +12,13 @@ export type ApiEnvelope<T> = {
 const defaultApiBaseUrl = "http://localhost:4000/api/v1";
 
 const localHostnames = new Set(["localhost", "127.0.0.1", "::1"]);
+let refreshAccessToken: (() => Promise<string | undefined>) | undefined;
+
+export function setAccessTokenRefresher(
+  refresher: (() => Promise<string | undefined>) | undefined,
+) {
+  refreshAccessToken = refresher;
+}
 
 export const getApiBaseUrl = () => {
   const configuredBaseUrl =
@@ -60,10 +67,21 @@ export async function apiFetch<T>(
     headers.set("Authorization", `Bearer ${init.token}`);
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  let response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers,
   });
+
+  if (response.status === 401 && init.token && refreshAccessToken) {
+    const nextToken = await refreshAccessToken();
+    if (nextToken) {
+      headers.set("Authorization", `Bearer ${nextToken}`);
+      response = await fetch(`${getApiBaseUrl()}${path}`, {
+        ...init,
+        headers,
+      });
+    }
+  }
 
   const body = (await response
     .json()
@@ -96,10 +114,22 @@ export async function apiFetchText(
     headers.set("Authorization", `Bearer ${init.token}`);
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  let response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers,
   });
+
+  if (response.status === 401 && init.token && refreshAccessToken) {
+    const nextToken = await refreshAccessToken();
+    if (nextToken) {
+      headers.set("Authorization", `Bearer ${nextToken}`);
+      response = await fetch(`${getApiBaseUrl()}${path}`, {
+        ...init,
+        headers,
+      });
+    }
+  }
+
   const text = await response.text();
 
   if (!response.ok) {

@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS payments_local (
   transaction_id TEXT NOT NULL REFERENCES sales_transactions_local(id),
   method TEXT NOT NULL,
   amount INTEGER NOT NULL,
+  amount_received INTEGER,
   status TEXT NOT NULL,
   recorded_at TEXT NOT NULL,
   sync_status TEXT NOT NULL DEFAULT 'pending'
@@ -109,6 +110,10 @@ CREATE TABLE IF NOT EXISTS shifts_local (
   status TEXT NOT NULL DEFAULT 'open',
   sync_status TEXT NOT NULL DEFAULT 'pending'
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shifts_local_open_register
+ON shifts_local(register_id)
+WHERE status = 'open';
 
 CREATE TABLE IF NOT EXISTS sync_queue_local (
   id TEXT PRIMARY KEY,

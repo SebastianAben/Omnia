@@ -54,7 +54,7 @@ export function SyncStatusPanel() {
     try {
       const result = await replayPendingSync(token);
       setReplayMessage(
-        `${result.attempted} attempted, ${result.synced} synced, ${result.failed} failed, ${result.conflict} conflict.`,
+        `${result.attempted} attempted, ${result.synced} synced, ${result.failed} failed, ${result.conflict} conflict, ${result.deferred} deferred.`,
       );
       await refreshQueue();
     } catch (error) {
@@ -116,7 +116,9 @@ export function SyncStatusPanel() {
               <th className="px-3 py-2 font-medium">Entity</th>
               <th className="px-3 py-2 font-medium">Created</th>
               <th className="px-3 py-2 font-medium">Attempts</th>
+              <th className="px-3 py-2 font-medium">Next Retry</th>
               <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">Last Error</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 bg-white">
@@ -124,7 +126,7 @@ export function SyncStatusPanel() {
               <tr>
                 <td
                   className="px-3 py-6 text-center text-slate-500"
-                  colSpan={5}
+                  colSpan={7}
                 >
                   No queued local event
                 </td>
@@ -142,6 +144,11 @@ export function SyncStatusPanel() {
                   <td className="px-3 py-2 text-slate-600">
                     {item.attemptCount}
                   </td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {item.nextRetryAt
+                      ? new Date(item.nextRetryAt).toLocaleString("id-ID")
+                      : "-"}
+                  </td>
                   <td className="px-3 py-2">
                     <Badge
                       tone={
@@ -154,6 +161,9 @@ export function SyncStatusPanel() {
                     >
                       {item.status}
                     </Badge>
+                  </td>
+                  <td className="max-w-xs truncate px-3 py-2 text-xs text-slate-500">
+                    {item.lastErrorMessage ?? item.lastErrorCode ?? "-"}
                   </td>
                 </tr>
               ))

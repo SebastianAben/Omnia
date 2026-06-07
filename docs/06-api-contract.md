@@ -27,10 +27,15 @@ Error memakai bentuk:
 
 | Method | Endpoint | Fungsi |
 | --- | --- | --- |
-| POST | `/auth/login` | Login dan token. |
+| POST | `/auth/login` | Login, access token, dan refresh token. |
+| POST | `/auth/refresh` | Rotasi refresh session dan menerbitkan token baru. |
+| POST | `/auth/logout` | Mencabut refresh session. |
 | GET | `/auth/me` | Current user context. |
 
-MVP memakai bearer token. Production perlu JWT library/config yang kuat.
+MVP memakai bearer token HS256 dengan validasi signature, algoritma, claim, dan
+masa berlaku. Refresh token bersifat opaque, hanya hash HMAC yang disimpan di
+database, dirotasi sekali pakai, dan dapat dicabut melalui logout. Access token
+lama tetap berlaku sampai expiry pendeknya.
 
 ## Master Data
 
@@ -44,6 +49,10 @@ MVP memakai bearer token. Production perlu JWT library/config yang kuat.
 | GET | `/products` | List product. |
 | GET | `/branches/:branchId/product-prices` | Branch pricing. |
 
+Master data read membutuhkan bearer token. Daftar user, role, branch, dan
+category dibatasi untuk HQ Admin. Register dan harga cabang mengikuti branch
+scope user. Katalog POS hanya memakai harga aktif yang sedang berlaku.
+
 ## Inventory
 
 | Method | Endpoint | Fungsi |
@@ -51,6 +60,10 @@ MVP memakai bearer token. Production perlu JWT library/config yang kuat.
 | GET | `/inventory/balances` | Inventory balance. |
 | GET | `/inventory/movements` | Stock movement. |
 | GET | `/inventory/stock-movements` | Alias/compat stock movement. |
+
+Inventory read membutuhkan bearer token dan mengikuti branch scope user.
+Mutation inventory masuk melalui sync event `stock_movement.created`; backend
+menolak stok negatif dan snapshot before/after yang tidak cocok.
 
 ## Sync
 
@@ -62,6 +75,9 @@ MVP memakai bearer token. Production perlu JWT library/config yang kuat.
 | GET | `/sync/logs` | Monitoring sync log. |
 
 ## Dashboard, Reports, Audit, Monitoring
+
+Filter `from` dan `to` pada dashboard/report harus berupa ISO 8601 datetime
+dengan timezone. Jika keduanya dikirim, `from` tidak boleh melewati `to`.
 
 | Method | Endpoint | Fungsi |
 | --- | --- | --- |
