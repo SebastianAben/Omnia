@@ -12,7 +12,8 @@ export function AuditWorkspace() {
   const branch = useAppState((state) => state.branch);
   const role = useAppState((state) => state.role);
   const branchId = role === "supervisor" ? branch.id : undefined;
-  const audit = useAuditLogs(branchId, token);
+  const canReadAudit = role !== "cashier";
+  const audit = useAuditLogs(branchId, token, canReadAudit);
 
   return (
     <WorkspacePanel
@@ -23,6 +24,10 @@ export function AuditWorkspace() {
       {!token ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Login required to inspect audit logs.
+        </div>
+      ) : !canReadAudit ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Audit logs are restricted for the active role.
         </div>
       ) : audit.isLoading ? (
         <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
@@ -91,4 +96,3 @@ function auditTone(action: string): "neutral" | "success" | "warning" | "danger"
   }
   return "neutral";
 }
-

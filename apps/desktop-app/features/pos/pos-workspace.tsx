@@ -78,6 +78,11 @@ export function PosWorkspace() {
       return;
     }
 
+    if (paymentStatus === "paid" && amountReceived < totals.grandTotal) {
+      setCheckoutMessage("Amount received is lower than total.");
+      return;
+    }
+
     setCheckingOut(true);
     try {
       const result = await saveCheckoutLocally({
@@ -158,6 +163,7 @@ export function PosWorkspace() {
                   </div>
                   <Button
                     className="h-9 px-3"
+                    disabled={product.stockOnHand <= 0}
                     onClick={() => addProduct(product)}
                     type="button"
                     variant="secondary"
@@ -225,6 +231,7 @@ export function PosWorkspace() {
                     </span>
                     <Button
                       className="h-8 w-8 px-0"
+                      disabled={line.quantity >= line.product.stockOnHand}
                       onClick={() => addProduct(line.product)}
                       type="button"
                       variant="secondary"

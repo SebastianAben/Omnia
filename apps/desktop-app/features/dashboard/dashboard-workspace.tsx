@@ -45,9 +45,11 @@ export function DashboardWorkspace() {
     };
   }, [branch.id, branchFilter, days, scope]);
   const dashboard = useDashboard(scope, filters, token);
+  const canReadAudit = role !== "cashier";
   const audit = useAuditLogs(
     role === "supervisor" || role === "cashier" ? branch.id : branchFilter || undefined,
     token,
+    canReadAudit,
   );
 
   if (!token) {
@@ -115,7 +117,13 @@ export function DashboardWorkspace() {
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1.3fr_1fr]">
         <Panel title="Audit Trail" icon={ShieldCheck}>
-          {audit.data?.length ? (
+          {!canReadAudit ? (
+            <StatePanel label="Audit trail is restricted for the active role." />
+          ) : audit.isLoading ? (
+            <StatePanel label="Loading audit entries..." />
+          ) : audit.isError ? (
+            <StatePanel label="Audit API is unavailable or access is denied." tone="danger" />
+          ) : audit.data?.length ? (
             <div className="divide-y divide-slate-200">
               {audit.data.slice(0, 8).map((log) => (
                 <div className="grid gap-1 py-3" key={log.id}>
@@ -432,4 +440,3 @@ function Coverage({ label, done }: { label: string; done?: boolean }) {
     </div>
   );
 }
-

@@ -1,6 +1,5 @@
 import {
   Controller,
-  ForbiddenException,
   Get,
   Query,
   Req,
@@ -8,6 +7,11 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 
+import {
+  assertCentralAccess,
+  requireBranchScope,
+  resolveBranchScope,
+} from "../auth/access-scope";
 import type { CurrentUser } from "../auth/dto";
 import { AuthGuard } from "../auth/guards/auth.guard";
 import { DashboardService } from "./dashboard.service";
@@ -31,18 +35,8 @@ export class DashboardController {
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const user = request.user;
-    const effectiveBranchId = branchId ?? user.branch_id;
-
-    if (!effectiveBranchId) {
-      throw new ForbiddenException("branch_id is required for this user");
-    }
-    if (user.branch_id && user.branch_id !== effectiveBranchId) {
-      throw new ForbiddenException("User cannot access another branch dashboard");
-    }
-
     return this.dashboardService.branchDashboard({
-      branch_id: effectiveBranchId,
+      branch_id: requireBranchScope(request.user, branchId),
       from,
       to,
     });
@@ -56,16 +50,12 @@ export class DashboardController {
     @Query("from") from?: string,
     @Query("to") to?: string,
   ) {
-    const role = request.user.role_code.toLowerCase();
-    if (role.includes("cashier")) {
-      throw new ForbiddenException("Cashier role cannot access central dashboard");
-    }
+    assertCentralAccess(request.user);
 
     return this.dashboardService.centralDashboard({
-      branch_id: branchId,
+      branch_id: resolveBranchScope(request.user, branchId),
       from,
       to,
     });
   }
 }
-

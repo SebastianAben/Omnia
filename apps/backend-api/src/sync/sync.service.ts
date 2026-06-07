@@ -280,6 +280,8 @@ export class SyncService {
     }
 
     const bundle = parsed.data;
+    validateBundleConsistency(bundle);
+
     const idempotencyKeyValue = idempotencyKey ?? bundle.event_id;
     const duplicate = await this.prisma.syncLog.findFirst({
       where: {
@@ -646,6 +648,8 @@ export class SyncService {
     }
 
     const event = parsed.data;
+    validateStockMovementEventConsistency(event);
+
     const idempotencyKeyValue = idempotencyKey ?? event.event_id;
     const duplicate = await this.prisma.syncLog.findFirst({
       where: {
@@ -1279,6 +1283,120 @@ function validationError(message: string): BadRequestException {
       details: [{ message }],
     },
   });
+}
+
+function validateBundleConsistency(bundle: ParsedSyncBundle): void {
+  const { transaction, items, payments, stock_movements: movements } =
+    bundle.payload;
+
+  assertUniqueValues(
+    "item.id",
+    items.map((item) => item.id),
+  );
+  assertUniqueValues(
+    "payment.id",
+    payments.map((payment) => payment.id),
+  );
+  assertUniqueValues(
+    "stock_movement.id",
+    movements.map((movement) => movement.id),
+  );
+
+  const expectedTotal = decimal(transaction.subtotal_amount)
+    .minus(transaction.discount_amount)
+    .plus(transaction.tax_amount);
+
+  if (bundle.source_mode !== transaction.source_mode) {
+    throw validationError("source_mode does not match transaction.source_mode");
+  }
+
+  const itemSubtotal = items.reduce(
+    (total, item) => total.plus(decimal(item.unit_price).mul(item.quantity)),
+    new Prisma.Decimal(0),
+  );
+
+  if (!itemSubtotal.equals(transaction.subtotal_amount)) {
+    throw validationError("transaction subtotal_amount is inconsistent");
+  }
+
+  if (!expectedTotal.equals(transaction.total_amount)) {
+    throw validationError("transaction total_amount is inconsistent");
+  }
+
+  for (const item of items) {
+    const expectedLineTotal = decimal(item.unit_price)
+      .mul(item.quantity)
+      .minus(item.discount_amount)
+      .plus(item.tax_amount);
+
+    if (!expectedLineTotal.equals(item.line_total)) {
+      throw validationError(`line_total is inconsistent for item ${item.id}`);
+    }
+  }
+
+  if (transaction.payment_status === "paid") {
+    const paidAmount = payments
+      .filter((payment) => payment.payment_status === "paid")
+      .reduce(
+        (total, payment) => total.plus(payment.amount),
+        new Prisma.Decimal(0),
+      );
+
+    if (paidAmount.lessThan(transaction.total_amount)) {
+      throw validationError("paid transaction requires sufficient payment");
+    }
+  }
+
+  for (const movement of movements) {
+    validateStockMovementDirection(
+      movement.movement_type,
+      movement.quantity_delta,
+    );
+  }
+}
+
+function validateStockMovementEventConsistency(
+  event: ParsedStockMovementCreatedEvent,
+): void {
+  const movement = event.payload.stock_movement;
+  validateStockMovementDirection(
+    movement.movement_type,
+    movement.quantity_delta,
+  );
+}
+
+function validateStockMovementDirection(
+  movementType: string,
+  quantityDelta: number,
+): void {
+  const delta = decimal(quantityDelta);
+
+  if (movementType === "sale_out" && !delta.lessThan(0)) {
+    throw validationError("sale_out movement quantity_delta must be negative");
+  }
+  if (movementType === "adjustment_minus" && !delta.lessThan(0)) {
+    throw validationError(
+      "adjustment_minus movement quantity_delta must be negative",
+    );
+  }
+  if (
+    (movementType === "stock_in" || movementType === "adjustment_plus") &&
+    !delta.greaterThan(0)
+  ) {
+    throw validationError(
+      `${movementType} movement quantity_delta must be positive`,
+    );
+  }
+}
+
+function assertUniqueValues(label: string, values: string[]): void {
+  if (new Set(values).size !== values.length) {
+    throw validationError(`${label} values must be unique`);
+  }
+}
+
+function decimal(value: number): Prisma.Decimal {
+  return new Prisma.Decimal(value);
 }
 
 function toShiftJobType(eventType: ParsedShiftEvent["event_type"]): string {

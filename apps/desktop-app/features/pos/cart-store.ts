@@ -33,6 +33,10 @@ export const useCartStore = create<CartStore>()(
     amountReceived: 0,
     addProduct: (product) =>
       set((state) => {
+        if (product.stockOnHand <= 0) {
+          return state;
+        }
+
         const existing = state.lines.find(
           (line) => line.product.id === product.id,
         );
@@ -85,6 +89,7 @@ export const useCartStore = create<CartStore>()(
     clearCart: () => set({ lines: [] }),
     setPaymentMethod: (selectedPaymentMethod) => set({ selectedPaymentMethod }),
     setPaymentStatus: (paymentStatus) => set({ paymentStatus }),
-    setAmountReceived: (amountReceived) => set({ amountReceived }),
+    setAmountReceived: (amountReceived) =>
+      set({ amountReceived: Math.max(amountReceived, 0) }),
   })),
 );

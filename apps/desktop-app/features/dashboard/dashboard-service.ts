@@ -141,7 +141,11 @@ export function useDashboard(
   });
 }
 
-export function useAuditLogs(branchId?: string, token?: string) {
+export function useAuditLogs(
+  branchId?: string,
+  token?: string,
+  enabled = true,
+) {
   return useQuery({
     queryKey: dashboardKeys.audit(branchId),
     queryFn: () =>
@@ -149,7 +153,7 @@ export function useAuditLogs(branchId?: string, token?: string) {
         `/audit/logs${branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ""}`,
         { token },
       ),
-    enabled: Boolean(token),
+    enabled: Boolean(token) && enabled,
     staleTime: 60_000,
   });
 }
@@ -176,4 +180,3 @@ async function fetchDashboard(
     token,
   });
 }
-

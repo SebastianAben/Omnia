@@ -66,6 +66,8 @@ export type LocalStockMovementRecord = {
   syncStatus: LocalTransactionRecord["syncStatus"];
 };
 
+export type LocalSourceMode = "online" | "offline";
+
 type LocalStoreBridge = {
   saveCheckout: (input: unknown) => Promise<{
     transactionId: string;
@@ -107,6 +109,9 @@ const requireLocalStore = () => {
   return desktopWindow.omniaDesktop.localStore;
 };
 
+const getLocalSourceMode = (): LocalSourceMode =>
+  typeof navigator !== "undefined" && navigator.onLine ? "online" : "offline";
+
 export const isLocalStoreBridgeAvailable = () => {
   if (typeof window === "undefined") {
     return false;
@@ -130,7 +135,10 @@ export async function saveCheckoutLocally(input: {
   paymentStatus: PaymentStatus;
   amountReceived: number;
 }) {
-  return requireLocalStore().saveCheckout(input);
+  return requireLocalStore().saveCheckout({
+    ...input,
+    sourceMode: getLocalSourceMode(),
+  });
 }
 
 export async function listLocalSyncQueue() {
@@ -166,7 +174,10 @@ export async function saveStockAdjustmentLocally(input: {
   reasonCode: string;
   notes?: string | null;
 }) {
-  return requireLocalStore().saveStockAdjustment(input);
+  return requireLocalStore().saveStockAdjustment({
+    ...input,
+    sourceMode: getLocalSourceMode(),
+  });
 }
 
 export async function replayPendingSync(token?: string) {
@@ -185,5 +196,8 @@ export async function saveShiftEvent(input: {
   openingCashAmount?: number;
   closingCashAmount?: number;
 }) {
-  return requireLocalStore().saveShiftEvent(input);
+  return requireLocalStore().saveShiftEvent({
+    ...input,
+    sourceMode: getLocalSourceMode(),
+  });
 }

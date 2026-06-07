@@ -88,6 +88,18 @@ export function ShopeeWorkspace() {
     );
   }
 
+  if (!token) {
+    return (
+      <WorkspacePanel
+        badge="Sign in required"
+        description="Shopee marketplace setup requires an authenticated HQ Admin session."
+        title="Shopee Integration"
+      >
+        <StatePanel label="Login required to manage Shopee integration." tone="warning" />
+      </WorkspacePanel>
+    );
+  }
+
   return (
     <WorkspacePanel
       badge="HQ Admin"

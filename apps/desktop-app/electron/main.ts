@@ -14,6 +14,7 @@ const supportedReplayEventTypes = [
 ] as const;
 
 type SyncStatus = "pending" | "queued" | "synced" | "failed" | "conflict";
+type LocalSourceMode = "online" | "offline";
 
 type LocalStoreProduct = {
   id: string;
@@ -28,6 +29,7 @@ type SaveCheckoutInput = {
   register: { id: string; name: string };
   user: { id: string };
   shiftId?: string | null;
+  sourceMode?: LocalSourceMode;
   lines: Array<{
     product: LocalStoreProduct;
     quantity: number;
@@ -49,6 +51,7 @@ type ShiftEventInput = {
   register: { id: string };
   user: { id: string };
   action: "open" | "close";
+  sourceMode?: LocalSourceMode;
   shiftId?: string | null;
   openingCashAmount?: number;
   closingCashAmount?: number;
@@ -57,6 +60,7 @@ type ShiftEventInput = {
 type StockAdjustmentInput = {
   branch: { id: string };
   user: { id: string };
+  sourceMode?: LocalSourceMode;
   product: {
     id: string;
     sku: string;
@@ -88,6 +92,9 @@ const createId = (prefix: string) =>
   `${prefix}_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
+
+const normalizeSourceMode = (sourceMode?: LocalSourceMode): LocalSourceMode =>
+  sourceMode === "offline" ? "offline" : "online";
 
 const sqlValue = (value: string | number | null | undefined) => {
   if (value === null || value === undefined) {
@@ -174,11 +181,14 @@ function applyLocalStoreMigrations(dbPath: string) {
 }
 
 function saveCheckoutLocally(input: SaveCheckoutInput) {
+  assertValidCheckoutInput(input);
+
   const createdAt = new Date().toISOString();
   const transactionId = createId("trx");
   const eventId = createId("evt");
   const transactionNo = `TRX-${input.branch.code}-${input.register.id}-${Date.now()}`;
   const paymentId = createId("pay");
+  const sourceMode = normalizeSourceMode(input.sourceMode);
 
   const payload = {
     transaction: {
@@ -195,7 +205,7 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
       total_amount: input.totals.grandTotal,
       payment_status: input.paymentStatus,
       transaction_status: "completed",
-      source_mode: "online",
+      source_mode: sourceMode,
       local_reference_id: transactionId,
     },
     items: input.lines.map((line) => ({
@@ -243,7 +253,7 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
     event_version: 1,
     branch_id: input.branch.id,
     source_system: "branch_app",
-    source_mode: "online",
+    source_mode: sourceMode,
     occurred_at: createdAt,
     produced_by_user_id: input.user.id,
     payload,
@@ -339,7 +349,7 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
       1,
       input.branch.id,
       "branch_app",
-      "online",
+      sourceMode,
       "sales_transaction",
       transactionId,
       JSON.stringify(syncEnvelope),
@@ -360,6 +370,34 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
     eventId,
     total: input.totals.grandTotal,
   };
+}
+
+function assertValidCheckoutInput(input: SaveCheckoutInput) {
+  if (!input.shiftId) {
+    throw new Error("Open shift is required before checkout.");
+  }
+
+  if (!input.lines.length) {
+    throw new Error("Cart is empty.");
+  }
+
+  if (
+    input.lines.some(
+      (line) =>
+        !Number.isFinite(line.quantity) ||
+        line.quantity <= 0 ||
+        line.quantity > line.product.stockOnHand,
+    )
+  ) {
+    throw new Error("Cart quantity exceeds local stock.");
+  }
+
+  if (
+    input.paymentStatus === "paid" &&
+    input.amountReceived < input.totals.grandTotal
+  ) {
+    throw new Error("Paid checkout requires enough amount received.");
+  }
 }
 
 function listLocalTransactions() {
@@ -571,6 +609,7 @@ async function replayPendingSync(input: {
 function saveShiftEvent(input: ShiftEventInput) {
   const occurredAt = new Date().toISOString();
   const shiftId = input.action === "open" ? createId("shift") : input.shiftId;
+  const sourceMode = normalizeSourceMode(input.sourceMode);
   if (!shiftId) {
     throw new Error("Active shift is required before closing a shift.");
   }
@@ -614,7 +653,7 @@ function saveShiftEvent(input: ShiftEventInput) {
         1,
         input.branch.id,
         "branch_app",
-        "online",
+        sourceMode,
         "shift",
         shiftId,
         JSON.stringify({
@@ -623,7 +662,7 @@ function saveShiftEvent(input: ShiftEventInput) {
           event_version: "1",
           branch_id: input.branch.id,
           source_system: "branch_app",
-          source_mode: "online",
+          source_mode: sourceMode,
           entity_type: "shift",
           entity_id: shiftId,
           occurred_at: occurredAt,
@@ -647,6 +686,7 @@ function saveStockAdjustment(input: StockAdjustmentInput) {
   const occurredAt = new Date().toISOString();
   const movementId = createId("mov");
   const eventId = createId("evt");
+  const sourceMode = normalizeSourceMode(input.sourceMode);
   const quantityDelta =
     input.movementType === "adjustment_plus"
       ? Math.abs(input.quantity)
@@ -712,7 +752,7 @@ function saveStockAdjustment(input: StockAdjustmentInput) {
         1,
         input.branch.id,
         "branch_app",
-        "online",
+        sourceMode,
         "stock_movement",
         movementId,
         JSON.stringify({
@@ -721,7 +761,7 @@ function saveStockAdjustment(input: StockAdjustmentInput) {
           event_version: "1",
           branch_id: input.branch.id,
           source_system: "branch_app",
-          source_mode: "online",
+          source_mode: sourceMode,
           entity_type: "stock_movement",
           entity_id: movementId,
           occurred_at: occurredAt,
