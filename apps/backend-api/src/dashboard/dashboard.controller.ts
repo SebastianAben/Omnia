@@ -1,6 +1,5 @@
 import {
   Controller,
-  ForbiddenException,
   Get,
   Query,
   Req,
@@ -8,8 +7,18 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 
+import {
+  assertCentralAccess,
+  requireBranchScope,
+  resolveBranchScope,
+} from "../auth/access-scope";
 import type { CurrentUser } from "../auth/dto";
 import { AuthGuard } from "../auth/guards/auth.guard";
+import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import {
+  type ReportQuery,
+  reportQuerySchema,
+} from "../reporting/reporting-query";
 import { DashboardService } from "./dashboard.service";
 
 type RequestWithUser = {
@@ -27,24 +36,11 @@ export class DashboardController {
   @ApiOkResponse({ description: "Branch operations dashboard." })
   branchDashboard(
     @Req() request: RequestWithUser,
-    @Query("branch_id") branchId?: string,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
+    @Query(new ZodValidationPipe(reportQuerySchema)) query: ReportQuery,
   ) {
-    const user = request.user;
-    const effectiveBranchId = branchId ?? user.branch_id;
-
-    if (!effectiveBranchId) {
-      throw new ForbiddenException("branch_id is required for this user");
-    }
-    if (user.branch_id && user.branch_id !== effectiveBranchId) {
-      throw new ForbiddenException("User cannot access another branch dashboard");
-    }
-
     return this.dashboardService.branchDashboard({
-      branch_id: effectiveBranchId,
-      from,
-      to,
+      ...query,
+      branch_id: requireBranchScope(request.user, query.branch_id),
     });
   }
 
@@ -52,20 +48,13 @@ export class DashboardController {
   @ApiOkResponse({ description: "Central dashboard for HQ and analyst roles." })
   centralDashboard(
     @Req() request: RequestWithUser,
-    @Query("branch_id") branchId?: string,
-    @Query("from") from?: string,
-    @Query("to") to?: string,
+    @Query(new ZodValidationPipe(reportQuerySchema)) query: ReportQuery,
   ) {
-    const role = request.user.role_code.toLowerCase();
-    if (role.includes("cashier")) {
-      throw new ForbiddenException("Cashier role cannot access central dashboard");
-    }
+    assertCentralAccess(request.user);
 
     return this.dashboardService.centralDashboard({
-      branch_id: branchId,
-      from,
-      to,
+      ...query,
+      branch_id: resolveBranchScope(request.user, query.branch_id),
     });
   }
 }
-

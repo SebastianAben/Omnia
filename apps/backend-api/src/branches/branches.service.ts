@@ -27,10 +27,13 @@ export class BranchesService {
   }
 
   async listBranchPrices(branchId: string) {
+    const now = new Date();
     const prices = await this.prisma.branchProductPrice.findMany({
       where: {
         branchId,
         isActive: true,
+        effectiveFrom: { lte: now },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
         product: { isActive: true },
       },
       orderBy: { product: { name: "asc" } },

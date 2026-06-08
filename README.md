@@ -2,6 +2,8 @@
 
 Omnia adalah Hybrid Omnichannel Smart POS untuk retail dan UMKM multi-cabang. MVP berfokus pada POS local-first, inventory, sync ke pusat, dashboard dasar, Shopee integration, dan AI insights sederhana.
 
+Dokumentasi utama tersedia di [docs/01-index.md](docs/01-index.md). Standar modularitas, clean code, dan performa ada di [docs/13-engineering-knowledge.md](docs/13-engineering-knowledge.md). Kesiapan Next.js untuk dibungkus sebagai desktop app dengan SQLite lokal dijelaskan di [docs/14-desktop-wrapper-readiness.md](docs/14-desktop-wrapper-readiness.md).
+
 ## Implementation Status
 
 Sprint 0 foundation sudah selesai dan repo sudah masuk fitur MVP awal. Fondasi monorepo, desktop app shell, backend API, database, auth demo, sync foundation, seed data, CI/CD, deployment/env contract, dashboard dasar, dan Shopee mock-first integration sudah tersedia.
@@ -68,7 +70,6 @@ docker compose up -d postgres redis
 
 ```bash
 pnpm --filter @omnia/backend-api db:migrate:local
-pnpm --filter @omnia/backend-api db:migrate:sprint5 # only needed for an existing DB created before Sprint 5
 pnpm --filter @omnia/backend-api prisma:seed
 pnpm --filter @omnia/desktop-app localdb:init
 ```
@@ -97,7 +98,7 @@ Setelah setup lokal, migration, seed, dan backend berjalan, validasi smoke Sprin
 pnpm smoke:mvp
 ```
 
-Smoke check ini memvalidasi health, login role utama, master data, sync bundle + idempotency, central dashboard, Shopee integration health, dan AI insights. Detail UAT, permission review, branch scoping, audit coverage, dan known issues ada di [Sprint 7 MVP Release Readiness](docs/Sprint-7-MVP-Release-Readiness.md). Backlog ekspansi setelah MVP ada di [Sprint 8 Post-MVP Expansion Backlog](docs/Sprint-8-Post-MVP-Expansion-Backlog.md).
+Smoke check ini memvalidasi health, login role utama, master data, sync bundle + idempotency, central dashboard, Shopee integration health, dan AI insights. Detail release readiness dan backlog ekspansi ada di [Implementation Roadmap](docs/10-implementation-roadmap.md).
 
 ## CI/CD Home Server
 
@@ -203,12 +204,12 @@ Key values:
 
 Sprint 5 Shopee webhook smoke payload can be posted to `POST /api/v1/webhooks/shopee/orders` with header `x-shopee-webhook-secret: <SHOPEE_WEBHOOK_SECRET>`. Real Shopee OAuth/signature and outbound stock sync are intentionally outside the current mock-first scope.
 
-See [Deployment Strategy](docs/Deployment-Strategy-Hybrid-Omnichannel-Smart-POS.md).
+See [Technical Stack](docs/08-technical-stack.md) and [System Architecture](docs/04-system-architecture.md).
 
 ## Design Workflow
 
-UI implementation should follow the selected Figma design and [DESIGN.md](docs/DESIGN.md). If the Figma source is not available to the developer/agent, implement only neutral placeholders and wait for exported screenshots/assets before doing visual polish.
+UI implementation should follow the selected Figma design and [UI Design Guide](docs/09-ui-design-guide.md). If the Figma source is not available to the developer/agent, implement only neutral placeholders and wait for exported screenshots/assets before doing visual polish.
 
 ## Multi-Agent Workflow
 
-Sprint work follows [Multi-Agent Workflow](docs/Multi-Agent-Workflow-Hybrid-Omnichannel-Smart-POS.md). PM must provide a final report after implementation, including completed work, validation, blockers, manual user actions, and next steps.
+Sprint work follows [Delivery Workflow](docs/11-delivery-workflow.md). PM must provide a final report after implementation, including completed work, validation, blockers, manual user actions, and next steps.

@@ -44,6 +44,12 @@ async function bootstrap(): Promise<void> {
       callback(new Error(`CORS origin not allowed: ${origin}`), false);
     },
     credentials: true,
+    exposedHeaders: [
+      "Content-Disposition",
+      "X-Omnia-Row-Count",
+      "X-Omnia-Row-Limit",
+      "X-Omnia-Truncated",
+    ],
   });
 
   const openApiConfig = new DocumentBuilder()

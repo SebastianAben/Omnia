@@ -3,17 +3,29 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  clearAuthSession,
+  readAuthSession,
+  writeAuthSession,
+  type AuthTokenPair,
+} from "./auth-session-store";
+
 const isDev = process.env.NODE_ENV !== "production";
 const devServerUrl = process.env.OMNIA_DESKTOP_URL ?? "http://localhost:3000";
 const checkoutEventType = "transaction.bundle";
+const replayBatchSize = 10;
+const replayMaxBackoffMs = 5 * 60 * 1000;
 const supportedReplayEventTypes = [
   "transaction.bundle",
   "shift.opened",
   "shift.closed",
   "stock_movement.created",
 ] as const;
+const allowedExternalProtocols = new Set(["http:", "https:"]);
 
 type SyncStatus = "pending" | "queued" | "synced" | "failed" | "conflict";
+type LocalSourceMode = "online" | "offline";
+type SyncSourceMode = "online" | "offline_replay";
 
 type LocalStoreProduct = {
   id: string;
@@ -21,6 +33,7 @@ type LocalStoreProduct = {
   name: string;
   price: number;
   stockOnHand: number;
+  minimumQuantity: number;
 };
 
 type SaveCheckoutInput = {
@@ -28,6 +41,7 @@ type SaveCheckoutInput = {
   register: { id: string; name: string };
   user: { id: string };
   shiftId?: string | null;
+  sourceMode?: LocalSourceMode;
   lines: Array<{
     product: LocalStoreProduct;
     quantity: number;
@@ -49,6 +63,7 @@ type ShiftEventInput = {
   register: { id: string };
   user: { id: string };
   action: "open" | "close";
+  sourceMode?: LocalSourceMode;
   shiftId?: string | null;
   openingCashAmount?: number;
   closingCashAmount?: number;
@@ -57,6 +72,7 @@ type ShiftEventInput = {
 type StockAdjustmentInput = {
   branch: { id: string };
   user: { id: string };
+  sourceMode?: LocalSourceMode;
   product: {
     id: string;
     sku: string;
@@ -80,14 +96,33 @@ type LocalSyncQueueRow = {
   status: SyncStatus;
   attempt_count: number;
   created_at: string;
+  next_retry_at?: string | null;
   last_error_code?: string | null;
   last_error_message?: string | null;
+};
+
+type LocalShiftRow = {
+  id: string;
+  branch_id: string;
+  register_id: string;
+  opened_at: string;
+  opening_cash_amount: number | null;
+  status: "open" | "closed";
+  sync_status: SyncStatus;
+};
+
+type LocalInventoryBalanceRow = {
+  quantity: number;
+  minimum_quantity: number;
 };
 
 const createId = (prefix: string) =>
   `${prefix}_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
+
+const normalizeSourceMode = (sourceMode?: LocalSourceMode): SyncSourceMode =>
+  sourceMode === "offline" ? "offline_replay" : "online";
 
 const sqlValue = (value: string | number | null | undefined) => {
   if (value === null || value === undefined) {
@@ -103,9 +138,20 @@ const sqlValue = (value: string | number | null | undefined) => {
 
 const getDesktopRoot = () => path.join(__dirname, "..");
 const getLocalDbPath = () =>
-  path.join(getDesktopRoot(), ".omnia", "omnia-local.db");
-const getLocalSchemaPath = () =>
-  path.join(getDesktopRoot(), "local-store", "schema.sql");
+  path.join(app.getPath("userData"), "omnia-local.db");
+const getLocalSchemaPath = () => {
+  const candidatePaths = [
+    path.join(getDesktopRoot(), "local-store", "schema.sql"),
+    path.join(process.resourcesPath, "local-store", "schema.sql"),
+  ];
+  const schemaPath = candidatePaths.find((candidate) => fs.existsSync(candidate));
+
+  if (!schemaPath) {
+    throw new Error("Local SQLite schema file is missing from the app bundle.");
+  }
+
+  return schemaPath;
+};
 
 function runSql(sql: string) {
   ensureLocalStore();
@@ -160,6 +206,8 @@ function applyLocalStoreMigrations(dbPath: string) {
     "ALTER TABLE stock_movements_local ADD COLUMN reason_code TEXT NOT NULL DEFAULT 'legacy';",
     "ALTER TABLE stock_movements_local ADD COLUMN notes TEXT;",
     "ALTER TABLE stock_movements_local ADD COLUMN performed_by_user_id TEXT;",
+    "ALTER TABLE payments_local ADD COLUMN amount_received INTEGER;",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_shifts_local_open_register ON shifts_local(register_id) WHERE status = 'open';",
   ];
 
   for (const statement of statements) {
@@ -174,11 +222,22 @@ function applyLocalStoreMigrations(dbPath: string) {
 }
 
 function saveCheckoutLocally(input: SaveCheckoutInput) {
+  assertValidCheckoutInput(input);
+  const activeShift = getActiveShift(input.branch.id, input.register.id);
+  if (!activeShift || activeShift.id !== input.shiftId) {
+    throw new Error("Checkout requires the active local shift for this register.");
+  }
+
+  const checkoutLines = resolveCheckoutLines(input);
+  const totals = calculateCheckoutTotals(checkoutLines);
+  assertCheckoutTotals(input.totals, totals);
+
   const createdAt = new Date().toISOString();
   const transactionId = createId("trx");
   const eventId = createId("evt");
   const transactionNo = `TRX-${input.branch.code}-${input.register.id}-${Date.now()}`;
   const paymentId = createId("pay");
+  const sourceMode = normalizeSourceMode(input.sourceMode);
 
   const payload = {
     transaction: {
@@ -189,16 +248,16 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
       shift_id: input.shiftId ?? null,
       cashier_user_id: input.user.id,
       transaction_datetime: createdAt,
-      subtotal_amount: input.totals.subtotal,
-      discount_amount: input.totals.discountTotal,
-      tax_amount: input.totals.taxTotal,
-      total_amount: input.totals.grandTotal,
+      subtotal_amount: totals.subtotal,
+      discount_amount: totals.discountTotal,
+      tax_amount: totals.taxTotal,
+      total_amount: totals.grandTotal,
       payment_status: input.paymentStatus,
       transaction_status: "completed",
-      source_mode: "online",
+      source_mode: sourceMode,
       local_reference_id: transactionId,
     },
-    items: input.lines.map((line) => ({
+    items: checkoutLines.map((line) => ({
       id: createId("item"),
       product_id: line.product.id,
       product_name_snapshot: line.product.name,
@@ -213,7 +272,7 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
       {
         id: paymentId,
         payment_method_code: input.paymentMethod,
-        amount: input.totals.grandTotal,
+        amount: totals.grandTotal,
         payment_status: input.paymentStatus,
         payment_reference: null,
         paid_at: input.paymentStatus === "paid" ? createdAt : null,
@@ -223,7 +282,7 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
             : null,
       },
     ],
-    stock_movements: input.lines.map((line) => ({
+    stock_movements: checkoutLines.map((line) => ({
       id: createId("mov"),
       product_id: line.product.id,
       source_type: "sales_transaction",
@@ -243,7 +302,7 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
     event_version: 1,
     branch_id: input.branch.id,
     source_system: "branch_app",
-    source_mode: "online",
+    source_mode: sourceMode,
     occurred_at: createdAt,
     produced_by_user_id: input.user.id,
     payload,
@@ -258,17 +317,17 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
       input.register.id,
       input.user.id,
       input.shiftId ?? null,
-      input.totals.subtotal,
-      input.totals.discountTotal,
-      input.totals.taxTotal,
-      input.totals.grandTotal,
+      totals.subtotal,
+      totals.discountTotal,
+      totals.taxTotal,
+      totals.grandTotal,
       input.paymentStatus,
       "pending",
       createdAt,
     ]
       .map(sqlValue)
       .join(", ")});`,
-    ...input.lines.map(
+    ...checkoutLines.map(
       (line, index) =>
         `INSERT INTO sales_transaction_items_local (id, transaction_id, product_id, sku, name, quantity, unit_price, discount_total, subtotal) VALUES (${[
           payload.items[index].id,
@@ -284,20 +343,21 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
           .map(sqlValue)
           .join(", ")});`,
     ),
-    `INSERT INTO payments_local (id, transaction_id, method, amount, status, recorded_at, sync_status) VALUES (${[
+    `INSERT INTO payments_local (id, transaction_id, method, amount, amount_received, status, recorded_at, sync_status) VALUES (${[
       paymentId,
       transactionId,
       input.paymentMethod,
-      input.totals.grandTotal,
+      totals.grandTotal,
+      input.amountReceived,
       input.paymentStatus,
       createdAt,
       "pending",
     ]
       .map(sqlValue)
       .join(", ")});`,
-    ...input.lines.flatMap((line, index) => {
-      const before = line.product.stockOnHand;
-      const after = Math.max(before - line.quantity, 0);
+    ...checkoutLines.flatMap((line, index) => {
+      const before = line.quantityBefore;
+      const after = line.quantityAfter;
       const inventoryId = `inv_${input.branch.id}_${line.product.id}`;
 
       return [
@@ -306,13 +366,13 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
           input.branch.id,
           line.product.id,
           after,
-          0,
+          line.product.minimumQuantity,
           createdAt,
         ]
           .map(sqlValue)
           .join(
             ", ",
-          )}) ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = MAX(inventory_balances_local.quantity - ${sqlValue(line.quantity)}, 0), updated_at = excluded.updated_at;`,
+          )}) ON CONFLICT(branch_id, product_id) DO UPDATE SET quantity = excluded.quantity, minimum_quantity = excluded.minimum_quantity, updated_at = excluded.updated_at;`,
         `INSERT INTO stock_movements_local (id, branch_id, product_id, source_type, source_id, movement_type, quantity_delta, quantity_before, quantity_after, reason_code, performed_by_user_id, occurred_at, sync_status) VALUES (${[
           payload.stock_movements[index].id,
           input.branch.id,
@@ -339,7 +399,7 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
       1,
       input.branch.id,
       "branch_app",
-      "online",
+      sourceMode,
       "sales_transaction",
       transactionId,
       JSON.stringify(syncEnvelope),
@@ -358,8 +418,124 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
     transactionId,
     transactionNo,
     eventId,
-    total: input.totals.grandTotal,
+    total: totals.grandTotal,
   };
+}
+
+function assertValidCheckoutInput(input: SaveCheckoutInput) {
+  if (!input.shiftId) {
+    throw new Error("Open shift is required before checkout.");
+  }
+
+  if (!input.lines.length) {
+    throw new Error("Cart is empty.");
+  }
+
+  if (new Set(input.lines.map((line) => line.product.id)).size !== input.lines.length) {
+    throw new Error("Cart contains duplicate product lines.");
+  }
+
+  if (
+    input.lines.some(
+      (line) =>
+        !Number.isFinite(line.quantity) ||
+        line.quantity <= 0 ||
+        !Number.isFinite(line.product.price) ||
+        line.product.price < 0 ||
+        !Number.isFinite(line.discountTotal) ||
+        line.discountTotal < 0 ||
+        line.discountTotal > line.product.price * line.quantity,
+    )
+  ) {
+    throw new Error("Cart contains invalid quantity, price, or discount.");
+  }
+
+  if (!["cash", "transfer", "qris", "debit"].includes(input.paymentMethod)) {
+    throw new Error("Unsupported payment method.");
+  }
+  if (!["paid", "pending"].includes(input.paymentStatus)) {
+    throw new Error("Unsupported payment status.");
+  }
+  if (!Number.isFinite(input.amountReceived) || input.amountReceived < 0) {
+    throw new Error("Amount received must be a non-negative number.");
+  }
+
+  if (
+    input.paymentStatus === "paid" &&
+    input.amountReceived < input.totals.grandTotal
+  ) {
+    throw new Error("Paid checkout requires enough amount received.");
+  }
+}
+
+function resolveCheckoutLines(input: SaveCheckoutInput) {
+  const balances = querySql<{
+    product_id: string;
+    quantity: number;
+  }>(
+    `SELECT product_id, quantity FROM inventory_balances_local WHERE branch_id = ${sqlValue(input.branch.id)} AND product_id IN (${input.lines.map((line) => sqlValue(line.product.id)).join(", ")});`,
+  );
+  const quantityByProduct = new Map(
+    balances.map((balance) => [
+      balance.product_id,
+      Number(balance.quantity),
+    ]),
+  );
+
+  return input.lines.map((line) => {
+    const quantityBefore =
+      quantityByProduct.get(line.product.id) ?? line.product.stockOnHand;
+    const quantityAfter = quantityBefore - line.quantity;
+    if (!Number.isFinite(quantityBefore) || quantityAfter < 0) {
+      throw new Error(`Insufficient local stock for ${line.product.name}.`);
+    }
+
+    return {
+      ...line,
+      quantityBefore,
+      quantityAfter,
+    };
+  });
+}
+
+function calculateCheckoutTotals(
+  lines: Array<{
+    product: LocalStoreProduct;
+    quantity: number;
+    discountTotal: number;
+  }>,
+) {
+  const subtotal = lines.reduce(
+    (total, line) => total + line.product.price * line.quantity,
+    0,
+  );
+  const discountTotal = lines.reduce(
+    (total, line) => total + line.discountTotal,
+    0,
+  );
+  const taxableAmount = subtotal - discountTotal;
+  const taxTotal = Math.round(taxableAmount * 0.11);
+
+  return {
+    subtotal,
+    discountTotal,
+    taxTotal,
+    grandTotal: taxableAmount + taxTotal,
+  };
+}
+
+function assertCheckoutTotals(
+  provided: SaveCheckoutInput["totals"],
+  calculated: ReturnType<typeof calculateCheckoutTotals>,
+) {
+  if (
+    provided.subtotal !== calculated.subtotal ||
+    provided.discountTotal !== calculated.discountTotal ||
+    provided.taxTotal !== calculated.taxTotal ||
+    provided.grandTotal !== calculated.grandTotal
+  ) {
+    throw new Error("Checkout totals do not match cart lines.");
+  }
 }
 
 function listLocalTransactions() {
@@ -378,6 +554,7 @@ function listLocalTransactions() {
     created_at: string;
     method?: string | null;
     amount?: number | null;
+    amount_received?: number | null;
   }>(
     `SELECT t.*, p.method, p.amount FROM sales_transactions_local t LEFT JOIN payments_local p ON p.transaction_id = t.id ORDER BY t.created_at DESC LIMIT 100;`,
   );
@@ -428,7 +605,11 @@ function listLocalTransactions() {
       })),
     paymentMethod: transaction.method ?? "cash",
     paymentStatus: transaction.payment_status,
-    amountReceived: Number(transaction.amount ?? transaction.grand_total),
+    amountReceived: Number(
+      transaction.amount_received ??
+        transaction.amount ??
+        transaction.grand_total,
+    ),
     createdAt: transaction.created_at,
     syncStatus: transaction.sync_status,
   }));
@@ -436,7 +617,7 @@ function listLocalTransactions() {
 
 function listLocalSyncQueue() {
   return querySql<LocalSyncQueueRow>(
-    `SELECT id, event_id, event_type, branch_id, entity_id, payload_json, status, attempt_count, created_at, last_error_code, last_error_message FROM sync_queue_local ORDER BY created_at DESC LIMIT 100;`,
+    `SELECT id, event_id, event_type, branch_id, entity_id, payload_json, status, attempt_count, created_at, next_retry_at, last_error_code, last_error_message FROM sync_queue_local ORDER BY created_at DESC LIMIT 100;`,
   ).map((row) => ({
     id: row.id,
     eventId: row.event_id,
@@ -447,6 +628,7 @@ function listLocalSyncQueue() {
     status: row.status,
     attemptCount: Number(row.attempt_count),
     createdAt: row.created_at,
+    nextRetryAt: row.next_retry_at ?? undefined,
     lastErrorCode: row.last_error_code ?? undefined,
     lastErrorMessage: row.last_error_message ?? undefined,
   }));
@@ -514,22 +696,35 @@ function listLocalStockMovements() {
   }));
 }
 
+const calculateReplayBackoffMs = (attemptCount: number) =>
+  Math.min(2 ** Math.max(attemptCount - 1, 0) * 15_000, replayMaxBackoffMs);
+
+const getReplayErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
 async function replayPendingSync(input: {
   apiBaseUrl: string;
   token?: string;
 }) {
+  const now = new Date().toISOString();
+  const staleQueuedBefore = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  runSql(
+    `UPDATE sync_queue_local SET status = 'failed', next_retry_at = ${sqlValue(now)}, last_error_code = 'REPLAY_STALE', last_error_message = 'Queued replay attempt timed out before acknowledgement.' WHERE status = 'queued' AND last_attempt_at IS NOT NULL AND last_attempt_at < ${sqlValue(staleQueuedBefore)};`,
+  );
   const pending = querySql<LocalSyncQueueRow>(
-    `SELECT * FROM sync_queue_local WHERE event_type IN (${supportedReplayEventTypes.map(sqlValue).join(", ")}) AND status IN ('pending', 'failed') ORDER BY created_at ASC LIMIT 10;`,
+    `SELECT * FROM sync_queue_local WHERE event_type IN (${supportedReplayEventTypes.map(sqlValue).join(", ")}) AND status IN ('pending', 'failed') AND (next_retry_at IS NULL OR next_retry_at <= ${sqlValue(now)}) ORDER BY created_at ASC LIMIT ${replayBatchSize};`,
   );
   let synced = 0;
   let failed = 0;
   let conflict = 0;
+  let deferred = 0;
 
   for (const item of pending) {
     const attemptedAt = new Date().toISOString();
     runSql(
-      `UPDATE sync_queue_local SET status = 'queued', attempt_count = attempt_count + 1, last_attempt_at = ${sqlValue(attemptedAt)} WHERE id = ${sqlValue(item.id)};`,
+      `UPDATE sync_queue_local SET status = 'queued', attempt_count = attempt_count + 1, last_attempt_at = ${sqlValue(attemptedAt)}, next_retry_at = NULL WHERE id = ${sqlValue(item.id)};`,
     );
+    const nextAttemptCount = Number(item.attempt_count) + 1;
 
     try {
       const response = await fetch(getReplayEndpoint(input.apiBaseUrl, item), {
@@ -549,7 +744,8 @@ async function replayPendingSync(input: {
       } | null;
 
       if (!response.ok || !body?.success) {
-        throw new Error(body?.message ?? `HTTP ${response.status}`);
+        const code = body?.error?.code ?? `HTTP_${response.status}`;
+        throw new Error(`${code}: ${body?.message ?? response.statusText}`);
       }
 
       const nextStatus =
@@ -559,21 +755,45 @@ async function replayPendingSync(input: {
       conflict += nextStatus === "conflict" ? 1 : 0;
     } catch (error) {
       failed += 1;
+      const nextRetryAt = new Date(
+        Date.now() + calculateReplayBackoffMs(nextAttemptCount),
+      ).toISOString();
       runSql(
-        `UPDATE sync_queue_local SET status = 'failed', last_error_code = 'REPLAY_FAILED', last_error_message = ${sqlValue(error instanceof Error ? error.message : String(error))} WHERE id = ${sqlValue(item.id)};`,
+        `UPDATE sync_queue_local SET status = 'failed', next_retry_at = ${sqlValue(nextRetryAt)}, last_error_code = 'REPLAY_FAILED', last_error_message = ${sqlValue(getReplayErrorMessage(error))} WHERE id = ${sqlValue(item.id)};`,
       );
     }
   }
 
-  return { attempted: pending.length, synced, failed, conflict };
+  const [{ count: deferredCount = 0 } = { count: 0 }] = querySql<{
+    count: number;
+  }>(
+    `SELECT COUNT(*) as count FROM sync_queue_local WHERE event_type IN (${supportedReplayEventTypes.map(sqlValue).join(", ")}) AND status = 'failed' AND next_retry_at > ${sqlValue(now)};`,
+  );
+  deferred = Number(deferredCount);
+
+  return { attempted: pending.length, synced, failed, conflict, deferred };
 }
 
 function saveShiftEvent(input: ShiftEventInput) {
+  assertValidShiftEventInput(input);
   const occurredAt = new Date().toISOString();
   const shiftId = input.action === "open" ? createId("shift") : input.shiftId;
+  const sourceMode = normalizeSourceMode(input.sourceMode);
   if (!shiftId) {
     throw new Error("Active shift is required before closing a shift.");
   }
+
+  const activeShift = getActiveShift(input.branch.id, input.register.id);
+  if (input.action === "open" && activeShift) {
+    throw new Error("An active shift already exists for this register.");
+  }
+  if (
+    input.action === "close" &&
+    (!activeShift || activeShift.id !== shiftId)
+  ) {
+    throw new Error("The active local shift does not match this close request.");
+  }
+
   const eventId = createId("evt");
   const eventType = input.action === "open" ? "shift.opened" : "shift.closed";
   const payload = {
@@ -594,7 +814,7 @@ function saveShiftEvent(input: ShiftEventInput) {
     [
       "BEGIN IMMEDIATE;",
       input.action === "open"
-        ? `INSERT OR REPLACE INTO shifts_local (id, branch_id, register_id, opened_by_user_id, opened_at, opening_cash_amount, status, sync_status) VALUES (${[
+        ? `INSERT INTO shifts_local (id, branch_id, register_id, opened_by_user_id, opened_at, opening_cash_amount, status, sync_status) VALUES (${[
             shiftId,
             input.branch.id,
             input.register.id,
@@ -614,7 +834,7 @@ function saveShiftEvent(input: ShiftEventInput) {
         1,
         input.branch.id,
         "branch_app",
-        "online",
+        sourceMode,
         "shift",
         shiftId,
         JSON.stringify({
@@ -623,7 +843,7 @@ function saveShiftEvent(input: ShiftEventInput) {
           event_version: "1",
           branch_id: input.branch.id,
           source_system: "branch_app",
-          source_mode: "online",
+          source_mode: sourceMode,
           entity_type: "shift",
           entity_id: shiftId,
           occurred_at: occurredAt,
@@ -643,17 +863,88 @@ function saveShiftEvent(input: ShiftEventInput) {
   return { shiftId, eventId };
 }
 
+function getActiveShift(branchId: string, registerId: string) {
+  const [shift] = querySql<LocalShiftRow>(
+    `SELECT id, branch_id, register_id, opened_at, opening_cash_amount, status, sync_status FROM shifts_local WHERE branch_id = ${sqlValue(branchId)} AND register_id = ${sqlValue(registerId)} AND status = 'open' ORDER BY opened_at DESC LIMIT 1;`,
+  );
+
+  return shift
+    ? {
+        id: shift.id,
+        branchId: shift.branch_id,
+        registerId: shift.register_id,
+        openedAt: shift.opened_at,
+        openingCashAmount: Number(shift.opening_cash_amount ?? 0),
+        status: shift.status,
+        syncStatus: shift.sync_status,
+      }
+    : null;
+}
+
+function assertValidShiftEventInput(input: ShiftEventInput) {
+  const amount =
+    input.action === "open"
+      ? input.openingCashAmount ?? 0
+      : input.closingCashAmount ?? 0;
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("Shift cash amount must be a non-negative number.");
+  }
+}
+
+function assertValidStockAdjustmentInput(input: StockAdjustmentInput) {
+  if (!input.branch.id || !input.user.id || !input.product.id) {
+    throw new Error("Stock adjustment requires branch, user, and product.");
+  }
+  if (!["adjustment_plus", "adjustment_minus"].includes(input.movementType)) {
+    throw new Error("Unsupported stock adjustment type.");
+  }
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
+    throw new Error("Adjustment quantity must be greater than 0.");
+  }
+  if (!Number.isFinite(input.product.stockOnHand)) {
+    throw new Error("Product stock must be a valid number.");
+  }
+  if (!input.reasonCode.trim()) {
+    throw new Error("Adjustment reason is required.");
+  }
+}
+
+function getLocalInventoryBalance(branchId: string, productId: string) {
+  const [balance] = querySql<LocalInventoryBalanceRow>(
+    `SELECT quantity, minimum_quantity FROM inventory_balances_local WHERE branch_id = ${sqlValue(branchId)} AND product_id = ${sqlValue(productId)} LIMIT 1;`,
+  );
+
+  return balance
+    ? {
+        quantity: Number(balance.quantity),
+        minimumQuantity: Number(balance.minimum_quantity),
+      }
+    : null;
+}
+
 function saveStockAdjustment(input: StockAdjustmentInput) {
+  assertValidStockAdjustmentInput(input);
   const occurredAt = new Date().toISOString();
   const movementId = createId("mov");
   const eventId = createId("evt");
+  const sourceMode = normalizeSourceMode(input.sourceMode);
   const quantityDelta =
     input.movementType === "adjustment_plus"
       ? Math.abs(input.quantity)
       : -Math.abs(input.quantity);
-  const before = input.product.stockOnHand;
-  const after = Math.max(before + quantityDelta, 0);
+  const currentBalance = getLocalInventoryBalance(
+    input.branch.id,
+    input.product.id,
+  );
+  const before = currentBalance?.quantity ?? input.product.stockOnHand;
+  const after = before + quantityDelta;
+  if (after < 0) {
+    throw new Error("Adjustment cannot reduce stock below zero.");
+  }
   const inventoryId = `inv_${input.branch.id}_${input.product.id}`;
+  const minimumQuantity =
+    currentBalance?.minimumQuantity ?? input.product.minimumQuantity;
   const payload = {
     stock_movement: {
       id: movementId,
@@ -680,7 +971,7 @@ function saveStockAdjustment(input: StockAdjustmentInput) {
         input.branch.id,
         input.product.id,
         after,
-        input.product.minimumQuantity,
+        minimumQuantity,
         occurredAt,
       ]
         .map(sqlValue)
@@ -712,7 +1003,7 @@ function saveStockAdjustment(input: StockAdjustmentInput) {
         1,
         input.branch.id,
         "branch_app",
-        "online",
+        sourceMode,
         "stock_movement",
         movementId,
         JSON.stringify({
@@ -721,7 +1012,7 @@ function saveStockAdjustment(input: StockAdjustmentInput) {
           event_version: "1",
           branch_id: input.branch.id,
           source_system: "branch_app",
-          source_mode: "online",
+          source_mode: sourceMode,
           entity_type: "stock_movement",
           entity_id: movementId,
           occurred_at: occurredAt,
@@ -809,6 +1100,11 @@ function registerLocalStoreHandlers() {
   ipcMain.handle("omnia:local-store:save-shift-event", (_event, input) =>
     saveShiftEvent(input as ShiftEventInput),
   );
+  ipcMain.handle(
+    "omnia:local-store:get-active-shift",
+    (_event, input: { branchId: string; registerId: string }) =>
+      getActiveShift(input.branchId, input.registerId),
+  );
 }
 
 function createMainWindow() {
@@ -823,27 +1119,70 @@ function createMainWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
   });
 
+  mainWindow.webContents.session.webRequest.onHeadersReceived(
+    (details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          "Content-Security-Policy": [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:*;",
+          ],
+        },
+      });
+    },
+  );
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const allowedUrl = isDev ? devServerUrl : "file://";
+
+    if (!url.startsWith(allowedUrl)) {
+      event.preventDefault();
+    }
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
+
     return { action: "deny" };
   });
 
   if (isDev) {
     void mainWindow.loadURL(devServerUrl);
   } else {
-    void mainWindow.loadFile(
-      path.join(__dirname, "../.next/server/app/index.html"),
-    );
+    void mainWindow.loadFile(path.join(__dirname, "../out/index.html"));
+  }
+}
+
+function registerAuthSessionHandlers() {
+  ipcMain.handle("omnia:auth-session:read", () => readAuthSession());
+  ipcMain.handle("omnia:auth-session:write", (_event, input) =>
+    writeAuthSession(input as AuthTokenPair),
+  );
+  ipcMain.handle("omnia:auth-session:clear", () => clearAuthSession());
+}
+
+function isSafeExternalUrl(url: string) {
+  try {
+    const parsedUrl = new URL(url);
+
+    return allowedExternalProtocols.has(parsedUrl.protocol);
+  } catch {
+    return false;
   }
 }
 
 app.whenReady().then(() => {
   ensureLocalStore();
   registerLocalStoreHandlers();
+  registerAuthSessionHandlers();
   createMainWindow();
 
   app.on("activate", () => {

@@ -8,6 +8,9 @@ import {
   ReportQuery,
   toNumber,
 } from "../reporting/reporting-query";
+import { buildCsv, takeBoundedRows } from "./csv";
+
+const salesExportLimit = 1000;
 
 @Injectable()
 export class ReportsService {
@@ -172,6 +175,85 @@ export class ReportsService {
     );
   }
 
+  async salesSummaryCsv(query: ReportQuery) {
+    const window = parseReportWindow(query);
+    const matchingTransactions = await this.prisma.salesTransaction.findMany({
+      where: {
+        branchId: window.branchId,
+        transactionDatetime: { gte: window.from, lte: window.to },
+        transactionStatus: TransactionStatus.COMPLETED,
+      },
+      orderBy: { transactionDatetime: "desc" },
+      take: salesExportLimit + 1,
+      select: {
+        transactionNo: true,
+        transactionDatetime: true,
+        subtotalAmount: true,
+        discountAmount: true,
+        taxAmount: true,
+        totalAmount: true,
+        paymentStatus: true,
+        sourceMode: true,
+        branch: { select: { code: true, name: true } },
+        cashier: { select: { fullName: true, username: true } },
+        payments: {
+          where: { paymentStatus: PaymentStatus.PAID },
+          select: { paymentMethodCode: true, amount: true },
+        },
+      },
+    });
+
+    const { rows: transactions, truncated } = takeBoundedRows(
+      matchingTransactions,
+      salesExportLimit,
+    );
+    const csv = buildCsv([
+      [
+        "transaction_no",
+        "transaction_datetime",
+        "branch_code",
+        "branch_name",
+        "cashier",
+        "subtotal_amount",
+        "discount_amount",
+        "tax_amount",
+        "total_amount",
+        "paid_amount",
+        "payment_methods",
+        "payment_status",
+        "source_mode",
+      ],
+      ...transactions.map((transaction) => [
+        transaction.transactionNo,
+        transaction.transactionDatetime,
+        transaction.branch.code,
+        transaction.branch.name,
+        transaction.cashier.fullName || transaction.cashier.username,
+        toNumber(transaction.subtotalAmount),
+        toNumber(transaction.discountAmount),
+        toNumber(transaction.taxAmount),
+        toNumber(transaction.totalAmount),
+        transaction.payments.reduce(
+          (total, payment) => total + toNumber(payment.amount),
+          0,
+        ),
+        transaction.payments
+          .map((payment) => payment.paymentMethodCode)
+          .join("|"),
+        transaction.paymentStatus.toLowerCase(),
+        transaction.sourceMode.toLowerCase(),
+      ]),
+    ]);
+
+    return {
+      csv,
+      filename: buildSalesExportFilename(window.branchId, window.from, window.to),
+      row_count: transactions.length,
+      row_limit: salesExportLimit,
+      truncated,
+    };
+  }
+
   async slowMovingProducts(query: ReportQuery) {
     const window = parseReportWindow(query);
     const balances = await this.prisma.inventoryBalance.findMany({
@@ -214,3 +296,14 @@ export class ReportsService {
   }
 }
 
+function buildSalesExportFilename(
+  branchId: string | undefined,
+  from: Date,
+  to: Date,
+) {
+  const scope = branchId ? `branch-${branchId}` : "central";
+  const fromDate = from.toISOString().slice(0, 10);
+  const toDate = to.toISOString().slice(0, 10);
+
+  return `omnia-sales-summary-${scope}-${fromDate}-to-${toDate}.csv`;
+}

@@ -93,6 +93,8 @@ const syncBundleSchema = z.object({
           "sync_correction",
         ]),
         quantity_delta: quantitySchema,
+        quantity_before: quantitySchema.optional(),
+        quantity_after: quantitySchema.optional(),
         reason_code: z.string().min(1),
         notes: z.string().nullable().optional(),
         performed_by_user_id: z.string().nullable().optional(),
@@ -160,6 +162,8 @@ const stockMovementCreatedEventSchema = z.object({
         "sync_correction",
       ]),
       quantity_delta: quantitySchema,
+      quantity_before: quantitySchema.optional(),
+      quantity_after: quantitySchema.optional(),
       reason_code: z.string().min(1),
       notes: z.string().nullable().optional(),
       performed_by_user_id: z.string().min(1).nullable().optional(),
@@ -280,6 +284,8 @@ export class SyncService {
     }
 
     const bundle = parsed.data;
+    validateBundleConsistency(bundle);
+
     const idempotencyKeyValue = idempotencyKey ?? bundle.event_id;
     const duplicate = await this.prisma.syncLog.findFirst({
       where: {
@@ -513,14 +519,23 @@ export class SyncService {
         ? shift.opened_by_user_id
         : shift.closed_by_user_id;
     const [branch, register, user] = await Promise.all([
-      tx.branch.findUnique({ where: { id: event.branch_id } }),
+      tx.branch.findFirst({
+        where: { id: event.branch_id, isActive: true },
+      }),
       tx.register.findFirst({
         where: {
           id: shift.register_id,
           branchId: event.branch_id,
+          isActive: true,
         },
       }),
-      tx.user.findUnique({ where: { id: userId } }),
+      tx.user.findFirst({
+        where: {
+          id: userId,
+          isActive: true,
+          OR: [{ branchId: event.branch_id }, { branchId: null }],
+        },
+      }),
     ]);
 
     if (!branch) {
@@ -546,6 +561,17 @@ export class SyncService {
 
     if (existingShift) {
       return "duplicate_ignored";
+    }
+
+    const activeRegisterShift = await tx.shift.findFirst({
+      where: {
+        registerId: shift.register_id,
+        status: ShiftStatus.OPEN,
+      },
+      select: { id: true },
+    });
+    if (activeRegisterShift) {
+      throw validationError("register already has an active shift");
     }
 
     await tx.shift.create({
@@ -576,6 +602,8 @@ export class SyncService {
         id: true,
         branchId: true,
         registerId: true,
+        openedAt: true,
+        status: true,
       },
     });
 
@@ -588,14 +616,22 @@ export class SyncService {
     ) {
       throw validationError("shift branch_id/register_id does not match");
     }
+    if (existingShift.status !== ShiftStatus.OPEN) {
+      throw validationError("shift is not open");
+    }
+
+    const closedAt = new Date(
+      shift.closed_at ?? shift.occurred_at ?? event.occurred_at,
+    );
+    if (closedAt < existingShift.openedAt) {
+      throw validationError("closed_at cannot be before opened_at");
+    }
 
     await tx.shift.update({
       where: { id: shift.id },
       data: {
         closedByUserId: shift.closed_by_user_id!,
-        closedAt: new Date(
-          shift.closed_at ?? shift.occurred_at ?? event.occurred_at,
-        ),
+        closedAt,
         closingCashAmount: shift.closing_cash_amount ?? undefined,
         status: ShiftStatus.CLOSED,
       },
@@ -646,6 +682,8 @@ export class SyncService {
     }
 
     const event = parsed.data;
+    validateStockMovementEventConsistency(event);
+
     const idempotencyKeyValue = idempotencyKey ?? event.event_id;
     const duplicate = await this.prisma.syncLog.findFirst({
       where: {
@@ -856,6 +894,12 @@ export class SyncService {
     const before = new Prisma.Decimal(balance.quantityOnHand);
     const delta = new Prisma.Decimal(movement.quantity_delta);
     const after = before.plus(delta);
+    assertStockMovementBalanceSnapshot(movement, before, after);
+    if (after.lessThan(0)) {
+      throw validationError(
+        `insufficient central stock for product ${movement.product_id}`,
+      );
+    }
 
     await tx.stockMovement.create({
       data: {
@@ -1082,22 +1126,37 @@ export class SyncService {
       throw validationError("branch_id does not match transaction.branch_id");
     }
 
+    const transactionAt = new Date(
+      bundle.payload.transaction.transaction_datetime,
+    );
     const [branch, register, cashier, shift] = await Promise.all([
-      tx.branch.findUnique({ where: { id: bundle.branch_id } }),
+      tx.branch.findFirst({
+        where: { id: bundle.branch_id, isActive: true },
+      }),
       tx.register.findFirst({
         where: {
           id: bundle.payload.transaction.register_id,
           branchId: bundle.branch_id,
+          isActive: true,
         },
       }),
-      tx.user.findUnique({
-        where: { id: bundle.payload.transaction.cashier_user_id },
+      tx.user.findFirst({
+        where: {
+          id: bundle.payload.transaction.cashier_user_id,
+          isActive: true,
+          branchId: bundle.branch_id,
+        },
       }),
       bundle.payload.transaction.shift_id
         ? tx.shift.findFirst({
             where: {
               id: bundle.payload.transaction.shift_id,
               branchId: bundle.branch_id,
+              registerId: bundle.payload.transaction.register_id,
+            },
+            select: {
+              openedAt: true,
+              closedAt: true,
             },
           })
         : Promise.resolve(null),
@@ -1113,7 +1172,14 @@ export class SyncService {
       throw validationError("cashier_user_id is not registered");
     }
     if (bundle.payload.transaction.shift_id && !shift) {
-      throw validationError("shift_id is not valid for branch_id");
+      throw validationError("shift_id is not valid for branch/register");
+    }
+    if (
+      shift &&
+      (transactionAt < shift.openedAt ||
+        (shift.closedAt && transactionAt > shift.closedAt))
+    ) {
+      throw validationError("transaction_datetime is outside the shift window");
     }
 
     const productIds = new Set([
@@ -1121,7 +1187,7 @@ export class SyncService {
       ...bundle.payload.stock_movements.map((movement) => movement.product_id),
     ]);
     const products = await tx.product.findMany({
-      where: { id: { in: [...productIds] } },
+      where: { id: { in: [...productIds] }, isActive: true },
       select: { id: true },
     });
 
@@ -1161,6 +1227,12 @@ export class SyncService {
     const before = new Prisma.Decimal(balance.quantityOnHand);
     const delta = new Prisma.Decimal(movement.quantity_delta);
     const after = before.plus(delta);
+    assertStockMovementBalanceSnapshot(movement, before, after);
+    if (after.lessThan(0)) {
+      throw validationError(
+        `insufficient central stock for product ${movement.product_id}`,
+      );
+    }
 
     await tx.stockMovement.create({
       data: {
@@ -1281,6 +1353,193 @@ function validationError(message: string): BadRequestException {
   });
 }
 
+function validateBundleConsistency(bundle: ParsedSyncBundle): void {
+  const { transaction, items, payments, stock_movements: movements } =
+    bundle.payload;
+
+  assertUniqueValues(
+    "item.id",
+    items.map((item) => item.id),
+  );
+  assertUniqueValues(
+    "payment.id",
+    payments.map((payment) => payment.id),
+  );
+  assertUniqueValues(
+    "stock_movement.id",
+    movements.map((movement) => movement.id),
+  );
+
+  const expectedTotal = decimal(transaction.subtotal_amount)
+    .minus(transaction.discount_amount)
+    .plus(transaction.tax_amount);
+
+  if (bundle.source_mode !== transaction.source_mode) {
+    throw validationError("source_mode does not match transaction.source_mode");
+  }
+  if (
+    bundle.produced_by_user_id &&
+    bundle.produced_by_user_id !== transaction.cashier_user_id
+  ) {
+    throw validationError(
+      "produced_by_user_id does not match cashier_user_id",
+    );
+  }
+
+  const itemSubtotal = items.reduce(
+    (total, item) => total.plus(decimal(item.unit_price).mul(item.quantity)),
+    new Prisma.Decimal(0),
+  );
+
+  if (!itemSubtotal.equals(transaction.subtotal_amount)) {
+    throw validationError("transaction subtotal_amount is inconsistent");
+  }
+
+  const itemDiscountTotal = items.reduce(
+    (total, item) => total.plus(item.discount_amount),
+    new Prisma.Decimal(0),
+  );
+  if (!itemDiscountTotal.equals(transaction.discount_amount)) {
+    throw validationError("transaction discount_amount is inconsistent");
+  }
+
+  if (!expectedTotal.equals(transaction.total_amount)) {
+    throw validationError("transaction total_amount is inconsistent");
+  }
+
+  for (const item of items) {
+    const expectedLineTotal = decimal(item.unit_price)
+      .mul(item.quantity)
+      .minus(item.discount_amount)
+      .plus(item.tax_amount);
+
+    if (!expectedLineTotal.equals(item.line_total)) {
+      throw validationError(`line_total is inconsistent for item ${item.id}`);
+    }
+  }
+
+  if (transaction.payment_status === "paid") {
+    const paidAmount = payments
+      .filter((payment) => payment.payment_status === "paid")
+      .reduce(
+        (total, payment) => total.plus(payment.amount),
+        new Prisma.Decimal(0),
+      );
+
+    if (paidAmount.lessThan(transaction.total_amount)) {
+      throw validationError("paid transaction requires sufficient payment");
+    }
+  }
+
+  for (const movement of movements) {
+    validateStockMovementDirection(
+      movement.movement_type,
+      movement.quantity_delta,
+    );
+    if (
+      movement.source_id &&
+      movement.source_id !== transaction.id
+    ) {
+      throw validationError(
+        `stock movement source_id is inconsistent for ${movement.id}`,
+      );
+    }
+    if (
+      movement.performed_by_user_id &&
+      movement.performed_by_user_id !== transaction.cashier_user_id
+    ) {
+      throw validationError(
+        `stock movement actor is inconsistent for ${movement.id}`,
+      );
+    }
+  }
+
+  const itemQuantityByProduct = sumQuantityByProduct(
+    items.map((item) => ({
+      productId: item.product_id,
+      quantity: decimal(item.quantity),
+    })),
+  );
+  const movementQuantityByProduct = sumQuantityByProduct(
+    movements
+      .filter((movement) => movement.movement_type === "sale_out")
+      .map((movement) => ({
+        productId: movement.product_id,
+        quantity: decimal(movement.quantity_delta).negated(),
+      })),
+  );
+
+  if (
+    itemQuantityByProduct.size !== movementQuantityByProduct.size ||
+    [...itemQuantityByProduct].some(
+      ([productId, quantity]) =>
+        !quantity.equals(movementQuantityByProduct.get(productId) ?? -1),
+    )
+  ) {
+    throw validationError(
+      "sale stock movements do not match transaction item quantities",
+    );
+  }
+}
+
+function validateStockMovementEventConsistency(
+  event: ParsedStockMovementCreatedEvent,
+): void {
+  const movement = event.payload.stock_movement;
+  validateStockMovementDirection(
+    movement.movement_type,
+    movement.quantity_delta,
+  );
+}
+
+function validateStockMovementDirection(
+  movementType: string,
+  quantityDelta: number,
+): void {
+  const delta = decimal(quantityDelta);
+
+  if (movementType === "sale_out" && !delta.lessThan(0)) {
+    throw validationError("sale_out movement quantity_delta must be negative");
+  }
+  if (movementType === "adjustment_minus" && !delta.lessThan(0)) {
+    throw validationError(
+      "adjustment_minus movement quantity_delta must be negative",
+    );
+  }
+  if (
+    (movementType === "stock_in" || movementType === "adjustment_plus") &&
+    !delta.greaterThan(0)
+  ) {
+    throw validationError(
+      `${movementType} movement quantity_delta must be positive`,
+    );
+  }
+}
+
+function assertUniqueValues(label: string, values: string[]): void {
+  if (new Set(values).size !== values.length) {
+    throw validationError(`${label} values must be unique`);
+  }
+}
+
+function sumQuantityByProduct(
+  rows: Array<{ productId: string; quantity: Prisma.Decimal }>,
+) {
+  const totals = new Map<string, Prisma.Decimal>();
+  for (const row of rows) {
+    totals.set(
+      row.productId,
+      (totals.get(row.productId) ?? new Prisma.Decimal(0)).plus(row.quantity),
+    );
+  }
+
+  return totals;
+}
+
+function decimal(value: number): Prisma.Decimal {
+  return new Prisma.Decimal(value);
+}
+
 function toShiftJobType(eventType: ParsedShiftEvent["event_type"]): string {
   return eventType === "shift.opened"
     ? "push_shift_opened"
@@ -1339,6 +1598,37 @@ function toStockMovementType(movementType: string): StockMovementType {
   };
 
   return map[movementType] ?? StockMovementType.SYNC_CORRECTION;
+}
+
+function assertStockMovementBalanceSnapshot(
+  movement: {
+    quantity_before?: unknown;
+    quantity_after?: unknown;
+    id: string;
+  },
+  before: Prisma.Decimal,
+  after: Prisma.Decimal,
+) {
+  if (
+    movement.quantity_before !== undefined &&
+    !new Prisma.Decimal(movement.quantity_before as Prisma.Decimal.Value).equals(
+      before,
+    )
+  ) {
+    throw validationError(
+      `stock movement quantity_before is inconsistent for ${movement.id}`,
+    );
+  }
+  if (
+    movement.quantity_after !== undefined &&
+    !new Prisma.Decimal(movement.quantity_after as Prisma.Decimal.Value).equals(
+      after,
+    )
+  ) {
+    throw validationError(
+      `stock movement quantity_after is inconsistent for ${movement.id}`,
+    );
+  }
 }
 
 function toSyncJobStatus(status?: string): SyncJobStatus | undefined {

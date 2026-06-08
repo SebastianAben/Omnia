@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ComponentType, ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { Badge, Button, cn } from "@omnia/ui";
 import {
   BarChart3,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { roleLabels, type OmniaRole, useAppState } from "@/lib/app-state";
 import { StatusBar } from "@/components/status-bar";
+import { logoutSession } from "@/features/auth/auth-service";
 
 const navByRole: Record<
   OmniaRole,
@@ -41,15 +42,15 @@ const navByRole: Record<
   ],
   hq_admin: [
     { href: "/workspace", label: "Dashboard", icon: MonitorCog },
-    { href: "/ai", label: "AI Review", icon: BrainCircuit },
+    { href: "/ai", label: "AI Insights", icon: BrainCircuit },
     { href: "/integrations/shopee", label: "Shopee", icon: PlugZap },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
     { href: "/audit", label: "Audit", icon: ShieldCheck },
-    { href: "/pos", label: "POS", icon: ReceiptText },
+    { href: "/pos", label: "POS Preview", icon: ReceiptText },
   ],
   executive: [
     { href: "/workspace", label: "Dashboard", icon: BarChart3 },
-    { href: "/ai", label: "AI Review", icon: BrainCircuit },
+    { href: "/ai", label: "AI Insights", icon: BrainCircuit },
     { href: "/sync-status", label: "Sync", icon: RefreshCcw },
     { href: "/audit", label: "Audit", icon: ShieldCheck },
   ],
@@ -57,8 +58,22 @@ const navByRole: Record<
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { role, setRole } = useAppState();
+  const router = useRouter();
+  const { role, setRole, token } = useAppState();
+  const [isSigningOut, setSigningOut] = useState(false);
   const navItems = navByRole[role];
+
+  const signOut = async () => {
+    setSigningOut(true);
+    try {
+      await logoutSession();
+    } catch {
+      // Local credentials are cleared before remote revocation is attempted.
+    } finally {
+      router.replace("/login");
+      setSigningOut(false);
+    }
+  };
 
   return (
     <div className="min-h-[100dvh] overflow-x-hidden bg-surface text-ink">
@@ -124,6 +139,20 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <span className="hidden xl:inline">{roleLabels[item]}</span>
                 </Button>
               ))}
+              {token ? (
+                <Button
+                  className="h-8 justify-center px-2 text-xs xl:justify-start"
+                  disabled={isSigningOut}
+                  onClick={() => void signOut()}
+                  type="button"
+                  variant="secondary"
+                >
+                  <span className="xl:hidden">SO</span>
+                  <span className="hidden xl:inline">
+                    {isSigningOut ? "Signing out..." : "Sign out"}
+                  </span>
+                </Button>
+              ) : null}
             </div>
           </div>
         </aside>

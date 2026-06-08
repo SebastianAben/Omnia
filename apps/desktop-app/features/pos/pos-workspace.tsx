@@ -32,6 +32,7 @@ export function PosWorkspace() {
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const [isCheckingOut, setCheckingOut] = useState(false);
   const branch = useAppState((state) => state.branch);
+  const token = useAppState((state) => state.token);
   const register = useAppState((state) => state.register);
   const user = useAppState((state) => state.user);
   const activeShiftId = useAppState((state) => state.activeShiftId);
@@ -53,12 +54,16 @@ export function PosWorkspace() {
   const setAmountReceived = useCartStore((state) => state.setAmountReceived);
 
   const catalogQuery = useQuery({
-    queryKey: ["pos-catalog", branch.id],
-    queryFn: () => loadPosCatalog(branch.id),
+    queryKey: ["pos-catalog", branch.id, token],
+    queryFn: () => loadPosCatalog(branch.id, token!),
+    enabled: Boolean(token),
     retry: 1,
   });
 
-  const products = catalogQuery.data ?? loadFallbackCatalog();
+  const products = useMemo(
+    () => (token ? (catalogQuery.data ?? []) : loadFallbackCatalog()),
+    [catalogQuery.data, token],
+  );
   const filteredProducts = useMemo(
     () => filterCatalog(products, query),
     [products, query],
@@ -74,6 +79,11 @@ export function PosWorkspace() {
 
     if (lines.length === 0) {
       setCheckoutMessage("Cart masih kosong.");
+      return;
+    }
+
+    if (paymentStatus === "paid" && amountReceived < totals.grandTotal) {
+      setCheckoutMessage("Amount received is lower than total.");
       return;
     }
 
@@ -117,8 +127,14 @@ export function PosWorkspace() {
           <div className="flex flex-col gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={catalogQuery.isError ? "warning" : "success"}>
-                  {catalogQuery.isError ? "Demo cache" : "API first"}
+                <Badge
+                  tone={token && catalogQuery.isError ? "warning" : "success"}
+                >
+                  {token
+                    ? catalogQuery.isError
+                      ? "Catalog unavailable"
+                      : "API catalog"
+                    : "Demo catalog"}
                 </Badge>
                 <Badge tone={canCheckout ? "success" : "warning"}>
                   Shift {shiftStatus}
@@ -153,12 +169,14 @@ export function PosWorkspace() {
             />
           </label>
 
-          {catalogQuery.isLoading ? (
+          {token && catalogQuery.isLoading ? (
             <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
                 <SkeletonProduct key={index} />
               ))}
             </div>
+          ) : token && catalogQuery.isError ? (
+            <CatalogState message="Katalog cabang tidak tersedia. Checkout dinonaktifkan sampai master data valid berhasil dimuat." />
           ) : filteredProducts.length === 0 ? (
             <div className="mt-5 rounded-3xl border border-dashed border-line bg-slate-50 px-5 py-12 text-center">
               <div className="text-base font-semibold text-slate-950">
@@ -208,6 +226,7 @@ export function PosWorkspace() {
                       </div>
                       <Button
                         className="h-10 w-full px-3"
+                        disabled={product.stockOnHand <= 0}
                         onClick={() => addProduct(product)}
                         type="button"
                         variant="secondary"
@@ -288,6 +307,7 @@ export function PosWorkspace() {
                     </span>
                     <Button
                       className="h-8 w-8 rounded-lg px-0"
+                      disabled={line.quantity >= line.product.stockOnHand}
                       onClick={() => addProduct(line.product)}
                       type="button"
                       variant="ghost"
@@ -437,6 +457,14 @@ function SkeletonProduct() {
       <div className="mt-3 h-4 w-1/2 rounded-lg bg-slate-200" />
       <div className="mt-16 h-6 w-24 rounded-lg bg-slate-200" />
       <div className="absolute inset-y-0 left-0 w-1/2 animate-shimmer bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+    </div>
+  );
+}
+
+function CatalogState({ message }: { message: string }) {
+  return (
+    <div className="mt-5 rounded-3xl border border-dashed border-line bg-slate-50 px-5 py-12 text-center text-sm leading-6 text-slate-600">
+      {message}
     </div>
   );
 }

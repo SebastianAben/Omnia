@@ -1,5 +1,4 @@
 import {
-  createHmac,
   scryptSync,
   timingSafeEqual,
 } from "node:crypto";
@@ -14,36 +13,16 @@ import type { ConfigType } from "@nestjs/config";
 import { ok } from "../common/http";
 import { appConfig } from "../config/app.config";
 import { PrismaService } from "../prisma/prisma.service";
-import { CurrentUser, LoginDto } from "./dto";
-
-type TokenPayload = {
-  sub: string;
-  username: string;
-  role_code: string;
-  branch_id?: string;
-  exp: number;
-};
-
-function base64Url(input: Buffer | string): string {
-  return Buffer.from(input).toString("base64url");
-}
-
-function parseExpiresIn(value: string): number {
-  const match = /^(\d+)([smhd])?$/.exec(value);
-  if (!match) {
-    return 15 * 60;
-  }
-
-  const amount = Number(match[1]);
-  const unit = match[2] ?? "s";
-  const multipliers: Record<string, number> = {
-    s: 1,
-    m: 60,
-    h: 60 * 60,
-    d: 24 * 60 * 60,
-  };
-  return amount * multipliers[unit];
-}
+import {
+  createRefreshToken,
+  hashRefreshToken,
+} from "./auth-session-token";
+import {
+  parseExpiresIn,
+  signAccessToken,
+  verifyAccessToken,
+} from "./auth-token";
+import { CurrentUser, LoginDto, RefreshSessionDto } from "./dto";
 
 @Injectable()
 export class AuthService {
@@ -93,8 +72,14 @@ export class AuthService {
       branch_id: user.branchId ?? undefined,
     };
 
+    const tokens = await this.issueSession(
+      user.id,
+      currentUser,
+      dto.device_id,
+    );
+
     return ok({
-      token: this.signToken(currentUser),
+      ...tokens,
       user: currentUser,
       permissions: [],
       branches: user.branch ? [this.serializeBranch(user.branch)] : [],
@@ -128,56 +113,133 @@ export class AuthService {
   }
 
   verifyToken(token: string): CurrentUser {
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      throw new UnauthorizedException("Invalid bearer token");
+    return verifyAccessToken(token, this.config.jwtSecret);
+  }
+
+  async refreshSession(dto: RefreshSessionDto) {
+    const now = new Date();
+    const tokenHash = this.hashRefreshToken(dto.refresh_token);
+    const session = await this.prisma.authSession.findUnique({
+      where: { tokenHash },
+      include: {
+        user: {
+          include: {
+            role: true,
+            branch: true,
+          },
+        },
+      },
+    });
+
+    if (
+      !session ||
+      session.revokedAt ||
+      session.expiresAt <= now ||
+      !session.user.isActive
+    ) {
+      throw new UnauthorizedException("Invalid or expired refresh token");
     }
 
-    const [header, payload, signature] = parts;
-    const expectedSignature = this.signature(`${header}.${payload}`);
-    if (signature !== expectedSignature) {
-      throw new UnauthorizedException("Invalid bearer token");
-    }
-
-    const parsedPayload = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8"),
-    ) as TokenPayload;
-    if (parsedPayload.exp < Math.floor(Date.now() / 1000)) {
-      throw new UnauthorizedException("Bearer token expired");
-    }
-
-    return {
-      id: parsedPayload.sub,
-      full_name: "",
-      username: parsedPayload.username,
-      role_code: parsedPayload.role_code,
-      branch_id: parsedPayload.branch_id,
+    const currentUser = {
+      id: session.user.id,
+      full_name: session.user.fullName,
+      username: session.user.username,
+      role_code: session.user.role.code,
+      branch_id: session.user.branchId ?? undefined,
     };
+    const nextRefreshToken = createRefreshToken();
+    const nextExpiresAt = this.refreshExpiry(now);
+
+    await this.prisma.$transaction(async (transaction) => {
+      const revoked = await transaction.authSession.updateMany({
+        where: {
+          id: session.id,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: now,
+          lastUsedAt: now,
+        },
+      });
+
+      if (revoked.count !== 1) {
+        throw new UnauthorizedException("Refresh token was already used");
+      }
+
+      await transaction.authSession.create({
+        data: {
+          userId: session.userId,
+          tokenHash: this.hashRefreshToken(nextRefreshToken),
+          deviceId: session.deviceId,
+          expiresAt: nextExpiresAt,
+        },
+      });
+    });
+
+    return ok({
+      token: this.signToken(currentUser),
+      refresh_token: nextRefreshToken,
+      user: currentUser,
+      permissions: [],
+      branches: session.user.branch
+        ? [this.serializeBranch(session.user.branch)]
+        : [],
+    });
+  }
+
+  async logout(dto: RefreshSessionDto) {
+    const revoked = await this.prisma.authSession.updateMany({
+      where: {
+        tokenHash: this.hashRefreshToken(dto.refresh_token),
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    return ok({ revoked: revoked.count > 0 });
   }
 
   private signToken(user: CurrentUser): string {
-    const header = base64Url(
-      JSON.stringify({ alg: "HS256", typ: "JWT" }),
+    return signAccessToken(
+      user,
+      this.config.jwtSecret,
+      this.config.jwtExpiresIn,
     );
-    const payload = base64Url(
-      JSON.stringify({
-        sub: user.id,
-        username: user.username,
-        role_code: user.role_code,
-        branch_id: user.branch_id,
-        exp:
-          Math.floor(Date.now() / 1000) +
-          parseExpiresIn(this.config.jwtExpiresIn),
-      } satisfies TokenPayload),
-    );
-    const signature = this.signature(`${header}.${payload}`);
-    return `${header}.${payload}.${signature}`;
   }
 
-  private signature(value: string): string {
-    return createHmac("sha256", this.config.jwtSecret)
-      .update(value)
-      .digest("base64url");
+  private async issueSession(
+    userId: string,
+    user: CurrentUser,
+    deviceId?: string,
+  ) {
+    const refreshToken = createRefreshToken();
+
+    await this.prisma.authSession.create({
+      data: {
+        userId,
+        tokenHash: this.hashRefreshToken(refreshToken),
+        deviceId,
+        expiresAt: this.refreshExpiry(),
+      },
+    });
+
+    return {
+      token: this.signToken(user),
+      refresh_token: refreshToken,
+    };
+  }
+
+  private hashRefreshToken(token: string): string {
+    return hashRefreshToken(token, this.config.refreshTokenSecret);
+  }
+
+  private refreshExpiry(now = new Date()): Date {
+    return new Date(
+      now.getTime() +
+        parseExpiresIn(this.config.refreshTokenExpiresIn) * 1000,
+    );
   }
 
   private verifyPassword(password: string, hash: string): boolean {

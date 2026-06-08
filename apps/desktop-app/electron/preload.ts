@@ -7,6 +7,12 @@ contextBridge.exposeInMainWorld("omniaDesktop", {
     chrome: process.versions.chrome,
     node: process.versions.node,
   },
+  authSession: {
+    read: () => ipcRenderer.invoke("omnia:auth-session:read"),
+    write: (input: unknown) =>
+      ipcRenderer.invoke("omnia:auth-session:write", input),
+    clear: () => ipcRenderer.invoke("omnia:auth-session:clear"),
+  },
   localStore: {
     saveCheckout: (input: unknown) =>
       ipcRenderer.invoke("omnia:local-store:save-checkout", input),
@@ -24,5 +30,7 @@ contextBridge.exposeInMainWorld("omniaDesktop", {
       ipcRenderer.invoke("omnia:local-store:replay-sync", input),
     saveShiftEvent: (input: unknown) =>
       ipcRenderer.invoke("omnia:local-store:save-shift-event", input),
+    getActiveShift: (input: unknown) =>
+      ipcRenderer.invoke("omnia:local-store:get-active-shift", input),
   },
 });

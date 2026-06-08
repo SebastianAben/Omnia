@@ -10,13 +10,15 @@ function Invoke-Json {
     [Parameter(Mandatory = $true)][string]$Method,
     [Parameter(Mandatory = $true)][string]$Url,
     [object]$Body,
-    [hashtable]$Headers = @{}
+    [hashtable]$Headers = @{},
+    [int]$TimeoutSec = 10
   )
 
   $params = @{
     Method = $Method
     Uri = $Url
     Headers = $Headers
+    TimeoutSec = $TimeoutSec
   }
 
   if ($null -ne $Body) {
@@ -24,7 +26,11 @@ function Invoke-Json {
     $params.Body = ($Body | ConvertTo-Json -Depth 20)
   }
 
-  Invoke-RestMethod @params
+  try {
+    Invoke-RestMethod @params
+  } catch {
+    throw "Request failed: $Method $Url. $($_.Exception.Message)"
+  }
 }
 
 function Assert-Success {

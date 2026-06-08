@@ -16,7 +16,8 @@ export interface BackendRuntimeConfig {
   redisUrl: string;
   jwtSecret: string;
   jwtExpiresIn: string;
-  refreshTokenSecret?: string;
+  refreshTokenSecret: string;
+  refreshTokenExpiresIn: string;
   logLevel: string;
 }
 
@@ -46,7 +47,11 @@ export function getBackendRuntimeConfig(env: EnvRecord): BackendRuntimeConfig {
     redisUrl: readRequired(env.REDIS_URL, "REDIS_URL"),
     jwtSecret: readRequired(env.JWT_SECRET, "JWT_SECRET"),
     jwtExpiresIn: env.JWT_EXPIRES_IN ?? "15m",
-    refreshTokenSecret: env.REFRESH_TOKEN_SECRET || undefined,
+    refreshTokenSecret: readRequired(
+      env.REFRESH_TOKEN_SECRET,
+      "REFRESH_TOKEN_SECRET",
+    ),
+    refreshTokenExpiresIn: env.REFRESH_TOKEN_EXPIRES_IN ?? "30d",
     logLevel: env.LOG_LEVEL ?? "info",
   };
 }

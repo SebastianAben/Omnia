@@ -6,6 +6,7 @@ import { Button, Badge } from "@omnia/ui";
 import { WorkspacePanel } from "@/components/app-shell";
 import { useAppState } from "@/lib/app-state";
 import {
+  getLocalActiveShift,
   isLocalStoreBridgeAvailable,
   listLocalSyncQueue,
   saveShiftEvent,
@@ -30,9 +31,25 @@ export function ShiftPanel() {
     setLocalStoreReady(hasBridge);
 
     if (hasBridge) {
-      void refreshPendingCount();
+      void Promise.all([
+        refreshPendingCount(),
+        getLocalActiveShift(branch.id, register.id).then((shift) => {
+          setActiveShiftId(shift?.id);
+          setShiftStatus(shift ? "open" : "closed");
+          if (shift) {
+            setOpeningCashAmount(shift.openingCashAmount);
+          }
+        }),
+      ]).catch((caught) => {
+        setError(toShiftErrorMessage(caught));
+      });
     }
-  }, []);
+  }, [
+    branch.id,
+    register.id,
+    setActiveShiftId,
+    setShiftStatus,
+  ]);
 
   const refreshPendingCount = async () => {
     try {
@@ -48,6 +65,10 @@ export function ShiftPanel() {
 
   const handleOpenShift = async () => {
     setError(null);
+    if (!Number.isFinite(openingCashAmount) || openingCashAmount < 0) {
+      setError("Opening cash must be a non-negative number.");
+      return;
+    }
 
     try {
       const result = await saveShiftEvent({
@@ -71,6 +92,10 @@ export function ShiftPanel() {
     }
 
     setError(null);
+    if (!Number.isFinite(closingCashAmount) || closingCashAmount < 0) {
+      setError("Closing cash must be a non-negative number.");
+      return;
+    }
 
     try {
       await saveShiftEvent({

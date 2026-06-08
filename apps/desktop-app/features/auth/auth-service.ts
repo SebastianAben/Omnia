@@ -1,9 +1,20 @@
-import { apiFetch } from "@/lib/api-client";
-import type { BranchContext, SessionUser } from "@/lib/app-state";
-import { roleFromApi } from "@/lib/app-state";
+import {
+  apiFetch,
+  ApiClientError,
+  setAccessTokenRefresher,
+} from "@/lib/api-client";
+import {
+  roleFromApi,
+  useAppState,
+  type BranchContext,
+  type RegisterContext,
+  type SessionUser,
+} from "@/lib/app-state";
+import { getLocalActiveShift } from "@/features/local-first/local-checkout-repository";
 
 type LoginResponse = {
   token: string;
+  refresh_token: string;
   user: {
     id: string;
     full_name: string;
@@ -22,11 +33,31 @@ export type LoginResult = {
   token: string;
   user: SessionUser;
   branch?: BranchContext;
+  register?: RegisterContext;
+  activeShiftId?: string;
 };
 
 const sessionTokenKey = "omnia.auth.token";
+const refreshTokenKey = "omnia.auth.refresh-token";
+type TokenPair = {
+  accessToken: string;
+  refreshToken: string;
+};
 
-const mapSession = (data: LoginResponse): LoginResult => ({
+type AuthSessionBridge = {
+  read: () => Promise<TokenPair | null>;
+  write: (tokenPair: TokenPair) => Promise<boolean>;
+  clear: () => Promise<void>;
+};
+
+let memoryTokenPair: TokenPair | undefined;
+let refreshPromise: Promise<string | undefined> | undefined;
+
+const mapSession = (
+  data: LoginResponse,
+  register?: RegisterContext,
+  activeShiftId?: string,
+): LoginResult => ({
   token: data.token,
   user: {
     id: data.user.id,
@@ -42,14 +73,98 @@ const mapSession = (data: LoginResponse): LoginResult => ({
         name: data.branches[0].name,
       }
     : undefined,
+  register,
+  activeShiftId,
 });
 
-export function saveSessionToken(token: string) {
-  window.localStorage.setItem(sessionTokenKey, token);
+type ApiRegister = {
+  id: string;
+  branch_id: string;
+  name: string;
+  device_identifier?: string | null;
+};
+
+async function saveTokenPair(
+  data: Pick<LoginResponse, "token" | "refresh_token">,
+) {
+  const tokenPair = {
+    accessToken: data.token,
+    refreshToken: data.refresh_token,
+  };
+  memoryTokenPair = tokenPair;
+
+  const secureStore = getAuthSessionBridge();
+  if (secureStore) {
+    clearBrowserTokenPair();
+    const persisted = await secureStore.write(tokenPair);
+    if (!persisted) {
+      console.warn(
+        "Secure session persistence is unavailable; tokens remain in memory.",
+      );
+    }
+    return;
+  }
 }
 
-export function readSessionToken() {
-  return window.localStorage.getItem(sessionTokenKey) ?? undefined;
+async function readTokenPair(): Promise<TokenPair | undefined> {
+  if (memoryTokenPair) {
+    return memoryTokenPair;
+  }
+
+  const secureStore = getAuthSessionBridge();
+  if (secureStore) {
+    const stored = await secureStore.read();
+    if (stored) {
+      memoryTokenPair = stored;
+      clearBrowserTokenPair();
+      return stored;
+    }
+
+    const legacyTokenPair = readBrowserTokenPair();
+    if (legacyTokenPair) {
+      memoryTokenPair = legacyTokenPair;
+      clearBrowserTokenPair();
+      const migrated = await secureStore.write(legacyTokenPair);
+      if (!migrated) {
+        console.warn(
+          "Secure session migration is unavailable; tokens remain in memory.",
+        );
+      }
+      return legacyTokenPair;
+    }
+
+    return undefined;
+  }
+
+  memoryTokenPair = readBrowserTokenPair();
+  clearBrowserTokenPair();
+  return memoryTokenPair;
+}
+
+async function clearStoredSession() {
+  memoryTokenPair = undefined;
+  clearBrowserTokenPair();
+  await getAuthSessionBridge()?.clear();
+}
+
+function readBrowserTokenPair(): TokenPair | undefined {
+  const accessToken = window.localStorage.getItem(sessionTokenKey);
+  const refreshToken = window.localStorage.getItem(refreshTokenKey);
+
+  return accessToken && refreshToken ? { accessToken, refreshToken } : undefined;
+}
+
+function clearBrowserTokenPair() {
+  window.localStorage.removeItem(sessionTokenKey);
+  window.localStorage.removeItem(refreshTokenKey);
+}
+
+function getAuthSessionBridge() {
+  const desktopWindow = window as typeof window & {
+    omniaDesktop?: { authSession?: AuthSessionBridge };
+  };
+
+  return desktopWindow.omniaDesktop?.authSession;
 }
 
 export async function loginWithPassword(input: {
@@ -66,20 +181,153 @@ export async function loginWithPassword(input: {
     }),
   });
 
-  const session = mapSession(data);
-  saveSessionToken(session.token);
+  const register = await resolveRegister(
+    data.user.branch_id,
+    data.token,
+    input.deviceId,
+  );
+  const activeShiftId = await resolveActiveShiftId(
+    data.user.branch_id,
+    register?.id,
+  );
+  const session = mapSession(data, register, activeShiftId);
+  await saveTokenPair(data);
   return session;
 }
 
 export async function restoreSession(): Promise<LoginResult | null> {
-  const token = readSessionToken();
+  let tokenPair = await readTokenPair();
+  let token = tokenPair?.accessToken;
+  if (!token && tokenPair?.refreshToken) {
+    token = await refreshSession();
+  }
+
   if (!token) {
     return null;
   }
 
-  const data = await apiFetch<Omit<LoginResponse, "token">>("/auth/me", {
-    token,
-  });
+  try {
+    const data = await apiFetch<Omit<LoginResponse, "token" | "refresh_token">>(
+      "/auth/me",
+      { token },
+    );
 
-  return mapSession({ ...data, token });
+    tokenPair = await readTokenPair();
+    const activeToken = tokenPair?.accessToken ?? token;
+    const register = await resolveRegister(
+      data.user.branch_id,
+      activeToken,
+    );
+    const activeShiftId = await resolveActiveShiftId(
+      data.user.branch_id,
+      register?.id,
+    );
+    return mapSession(
+      {
+        ...data,
+        token: activeToken,
+        refresh_token: tokenPair?.refreshToken ?? "",
+      },
+      register,
+      activeShiftId,
+    );
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 401) {
+      await clearStoredSession();
+      useAppState.getState().setToken(undefined);
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function configureAuthRefresh() {
+  setAccessTokenRefresher(refreshSession);
+}
+
+export async function logoutSession() {
+  const refreshToken = (await readTokenPair())?.refreshToken;
+  await clearStoredSession();
+  useAppState.getState().setToken(undefined);
+
+  if (refreshToken) {
+    await apiFetch("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  }
+}
+
+async function refreshSession(): Promise<string | undefined> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = rotateRefreshToken().finally(() => {
+    refreshPromise = undefined;
+  });
+  return refreshPromise;
+}
+
+async function rotateRefreshToken(): Promise<string | undefined> {
+  const refreshToken = (await readTokenPair())?.refreshToken;
+  if (!refreshToken) {
+    return undefined;
+  }
+
+  try {
+    const data = await apiFetch<LoginResponse>("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    await saveTokenPair(data);
+    useAppState.getState().setToken(data.token);
+    return data.token;
+  } catch {
+    await clearStoredSession();
+    useAppState.getState().setToken(undefined);
+    return undefined;
+  }
+}
+
+async function resolveRegister(
+  branchId: string | undefined,
+  token: string,
+  deviceId?: string,
+): Promise<RegisterContext | undefined> {
+  if (!branchId) {
+    return undefined;
+  }
+
+  const registers = await apiFetch<ApiRegister[]>(
+    `/registers?branch_id=${encodeURIComponent(branchId)}`,
+    { token },
+  );
+  const register =
+    registers.find((item) => item.device_identifier === deviceId) ??
+    registers[0];
+
+  if (!register) {
+    throw new Error("No active register is configured for this branch.");
+  }
+
+  return {
+    id: register.id,
+    name: register.name,
+  };
+}
+
+async function resolveActiveShiftId(
+  branchId?: string,
+  registerId?: string,
+): Promise<string | undefined> {
+  if (!branchId || !registerId) {
+    return undefined;
+  }
+
+  try {
+    return (await getLocalActiveShift(branchId, registerId))?.id;
+  } catch {
+    return undefined;
+  }
 }

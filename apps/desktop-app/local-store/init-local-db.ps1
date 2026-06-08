@@ -57,19 +57,17 @@ function Add-ColumnIfMissing {
   }
 }
 
-$syncQueueExists = Invoke-SqliteScalar "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sync_queue_local';"
-if ($syncQueueExists -eq "1") {
-  Add-ColumnIfMissing "sync_queue_local" "next_retry_at" "TEXT"
-  Add-ColumnIfMissing "sync_queue_local" "last_error_code" "TEXT"
-  Add-ColumnIfMissing "sync_queue_local" "last_error_message" "TEXT"
-  Add-ColumnIfMissing "sync_queue_local" "acknowledged_at" "TEXT"
-  Add-ColumnIfMissing "sync_queue_local" "ack_status" "TEXT"
-}
-
 $schemaSql = Get-Content -Raw -LiteralPath $schemaPath
 $schemaSql | & sqlite3 $dbPath
 if ($LASTEXITCODE -ne 0) {
   throw "sqlite3 failed while applying schema: $schemaPath"
 }
+
+Add-ColumnIfMissing "sync_queue_local" "next_retry_at" "TEXT"
+Add-ColumnIfMissing "sync_queue_local" "last_error_code" "TEXT"
+Add-ColumnIfMissing "sync_queue_local" "last_error_message" "TEXT"
+Add-ColumnIfMissing "sync_queue_local" "acknowledged_at" "TEXT"
+Add-ColumnIfMissing "sync_queue_local" "ack_status" "TEXT"
+Add-ColumnIfMissing "payments_local" "amount_received" "INTEGER"
 
 Write-Output "Desktop local SQLite database ready: $dbPath"

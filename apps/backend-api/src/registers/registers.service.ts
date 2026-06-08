@@ -7,9 +7,9 @@ import { PrismaService } from "../prisma/prisma.service";
 export class RegistersService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  async listRegisters() {
+  async listRegisters(branchId?: string) {
     const registers = await this.prisma.register.findMany({
-      where: { isActive: true },
+      where: { branchId, isActive: true },
       orderBy: [{ branch: { code: "asc" } }, { code: "asc" }],
       include: { branch: true },
     });

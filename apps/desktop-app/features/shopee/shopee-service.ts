@@ -129,6 +129,8 @@ export function useShopeeStores(token?: string) {
     queryKey: shopeeKeys.stores(),
     queryFn: () =>
       apiFetch<ShopeeStore[]>("/integrations/shopee/stores", { token }),
+    enabled: Boolean(token),
+    staleTime: 60_000,
   });
 }
 
@@ -140,6 +142,8 @@ export function useShopeeProductMappings(token?: string) {
         "/integrations/shopee/product-mappings",
         { token },
       ),
+    enabled: Boolean(token),
+    staleTime: 60_000,
   });
 }
 
@@ -148,6 +152,8 @@ export function useShopeeOrders(token?: string) {
     queryKey: shopeeKeys.orders(),
     queryFn: () =>
       apiFetch<ShopeeOrder[]>("/integrations/shopee/orders", { token }),
+    enabled: Boolean(token),
+    staleTime: 60_000,
   });
 }
 
@@ -158,7 +164,8 @@ export function useShopeeOrder(orderId: string | null, token?: string) {
       apiFetch<ShopeeOrder>(`/integrations/shopee/orders/${orderId}`, {
         token,
       }),
-    enabled: Boolean(orderId),
+    enabled: Boolean(orderId && token),
+    staleTime: 60_000,
   });
 }
 
@@ -169,6 +176,8 @@ export function useShopeeHealth(token?: string) {
       apiFetch<ShopeeIntegrationHealth>("/monitoring/integrations/shopee", {
         token,
       }),
+    enabled: Boolean(token),
+    staleTime: 60_000,
   });
 }
 
@@ -183,6 +192,8 @@ export function useProductOptions(token?: string) {
         name: product.name,
       }));
     },
+    enabled: Boolean(token),
+    staleTime: 60_000,
   });
 }
 

@@ -97,6 +97,22 @@ export function ReceiptList() {
                   <span>Total</span>
                   <span>{formatRupiah(transaction.totals.grandTotal)}</span>
                 </div>
+                <div className="mt-2 flex justify-between">
+                  <span className="text-slate-600">Received</span>
+                  <span>{formatRupiah(transaction.amountReceived)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Change</span>
+                  <span>
+                    {formatRupiah(
+                      Math.max(
+                        transaction.amountReceived -
+                          transaction.totals.grandTotal,
+                        0,
+                      ),
+                    )}
+                  </span>
+                </div>
               </div>
             </article>
           ))

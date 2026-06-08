@@ -44,6 +44,7 @@ type OmniaLocalSyncQueueRecord = {
   status: "pending" | "queued" | "synced" | "failed" | "conflict";
   attemptCount: number;
   createdAt: string;
+  nextRetryAt?: string;
   lastErrorCode?: string;
   lastErrorMessage?: string;
 };
@@ -83,6 +84,17 @@ declare global {
         chrome: string;
         node: string;
       };
+      authSession: {
+        read: () => Promise<{
+          accessToken: string;
+          refreshToken: string;
+        } | null>;
+        write: (input: {
+          accessToken: string;
+          refreshToken: string;
+        }) => Promise<boolean>;
+        clear: () => Promise<void>;
+      };
       localStore: {
         saveCheckout: (input: unknown) => Promise<{
           transactionId: string;
@@ -107,11 +119,24 @@ declare global {
           synced: number;
           failed: number;
           conflict: number;
+          deferred: number;
         }>;
         saveShiftEvent: (input: unknown) => Promise<{
           shiftId: string;
           eventId: string;
         }>;
+        getActiveShift: (input: {
+          branchId: string;
+          registerId: string;
+        }) => Promise<{
+          id: string;
+          branchId: string;
+          registerId: string;
+          openedAt: string;
+          openingCashAmount: number;
+          status: "open";
+          syncStatus: "pending" | "queued" | "synced" | "failed" | "conflict";
+        } | null>;
       };
     };
   }

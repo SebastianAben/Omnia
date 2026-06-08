@@ -33,6 +33,7 @@ const reasonOptions = [
 
 export function InventoryPanel() {
   const branch = useAppState((state) => state.branch);
+  const token = useAppState((state) => state.token);
   const user = useAppState((state) => state.user);
   const setPendingSyncCount = useAppState((state) => state.setPendingSyncCount);
   const [products, setProducts] = useState<PosProduct[]>([]);
@@ -51,7 +52,7 @@ export function InventoryPanel() {
   useEffect(() => {
     void refreshInventory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branch.id]);
+  }, [branch.id, token]);
 
   const productsWithBalances = useMemo<InventoryProduct[]>(() => {
     const balanceByProduct = new Map(
@@ -76,11 +77,17 @@ export function InventoryPanel() {
   const lowStockCount = productsWithBalances.filter(
     (product) => product.stockOnHand <= product.minimumQuantity,
   ).length;
+  const adjustmentWouldUnderflow =
+    movementType === "adjustment_minus" &&
+    selectedProduct &&
+    quantity > selectedProduct.stockOnHand;
 
   async function refreshInventory() {
     const [catalogResult, localBalances, localMovements, queue] =
       await Promise.all([
-        loadPosCatalog(branch.id).catch(() => loadFallbackCatalog()),
+        token
+          ? loadPosCatalog(branch.id, token).catch(() => [])
+          : loadFallbackCatalog(),
         listLocalInventoryBalances().catch(() => []),
         listLocalStockMovements().catch(() => []),
         listLocalSyncQueue().catch(() => []),
@@ -103,6 +110,10 @@ export function InventoryPanel() {
     }
     if (!Number.isFinite(quantity) || quantity <= 0) {
       setMessage("Adjustment quantity must be greater than 0.");
+      return;
+    }
+    if (adjustmentWouldUnderflow) {
+      setMessage("Adjustment cannot reduce stock below zero.");
       return;
     }
 
@@ -365,7 +376,7 @@ export function InventoryPanel() {
 
           <Button
             className="mt-4 w-full"
-            disabled={isSaving || !selectedProduct}
+            disabled={isSaving || !selectedProduct || adjustmentWouldUnderflow}
             onClick={handleAdjustment}
             type="button"
           >
