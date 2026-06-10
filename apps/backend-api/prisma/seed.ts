@@ -222,7 +222,6 @@ async function main(): Promise<void> {
       mainStock: 10,
       secondStock: 7,
       threshold: 3,
-      shopeeSku: "SHP-SKU-DEMO-001",
     },
     {
       sku: "SKU-DEMO-002",
@@ -232,7 +231,6 @@ async function main(): Promise<void> {
       mainStock: 2,
       secondStock: 14,
       threshold: 5,
-      shopeeSku: "SHP-SKU-DEMO-002",
     },
     {
       sku: "SKU-DEMO-003",
@@ -242,7 +240,6 @@ async function main(): Promise<void> {
       mainStock: 24,
       secondStock: 4,
       threshold: 6,
-      shopeeSku: "SHP-SKU-DEMO-003",
     },
   ];
 
@@ -384,61 +381,6 @@ async function main(): Promise<void> {
       type: "pos",
     },
   });
-
-  const shopeeChannel = await prisma.salesChannel.upsert({
-    where: { code: "shopee" },
-    update: { name: "Shopee", type: "marketplace", isActive: true },
-    create: {
-      code: "shopee",
-      name: "Shopee",
-      type: "marketplace",
-    },
-  });
-
-  const shopeeStore = await prisma.channelStore.upsert({
-    where: {
-      salesChannelId_externalStoreId: {
-        salesChannelId: shopeeChannel.id,
-        externalStoreId: "SHP-DEMO-STORE",
-      },
-    },
-    update: {
-      storeName: "Demo Shopee Store",
-      authStatus: "connected",
-      isActive: true,
-      connectedAt: new Date(),
-    },
-    create: {
-      salesChannelId: shopeeChannel.id,
-      storeName: "Demo Shopee Store",
-      externalStoreId: "SHP-DEMO-STORE",
-      authStatus: "connected",
-      connectedAt: new Date(),
-    },
-  });
-
-  for (const item of products) {
-    await prisma.productChannelMapping.upsert({
-      where: {
-        channelStoreId_externalSku: {
-          channelStoreId: shopeeStore.id,
-          externalSku: item.shopeeSku,
-        },
-      },
-      update: {
-        productId: item.product.id,
-        externalProductId: item.shopeeSku.replace("SHP-SKU", "SHP-PROD"),
-        mappingStatus: "mapped",
-      },
-      create: {
-        channelStoreId: shopeeStore.id,
-        productId: item.product.id,
-        externalProductId: item.shopeeSku.replace("SHP-SKU", "SHP-PROD"),
-        externalSku: item.shopeeSku,
-        mappingStatus: "mapped",
-      },
-    });
-  }
 
   await prisma.shift.upsert({
     where: { id: "shift-demo-open" },

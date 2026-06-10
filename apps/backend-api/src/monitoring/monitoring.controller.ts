@@ -4,7 +4,6 @@ import { ApiBearerAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 import { resolveBranchScope } from "../auth/access-scope";
 import type { CurrentUser } from "../auth/dto";
 import { AuthGuard } from "../auth/guards/auth.guard";
-import { HqAdminGuard } from "../auth/guards/hq-admin.guard";
 import { MonitoringService } from "./monitoring.service";
 
 type RequestWithUser = {
@@ -30,12 +29,5 @@ export class MonitoringController {
     return this.monitoringService.branchSyncHealth({
       branch_id: resolveBranchScope(request.user, branchId),
     });
-  }
-
-  @Get("integrations/shopee")
-  @UseGuards(HqAdminGuard)
-  @ApiOkResponse({ description: "Shopee integration health snapshot." })
-  shopeeIntegrationHealth() {
-    return this.monitoringService.shopeeIntegrationHealth();
   }
 }

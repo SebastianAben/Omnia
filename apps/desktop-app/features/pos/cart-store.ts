@@ -16,6 +16,7 @@ export interface CartActions {
   addProduct: (product: PosProduct) => void;
   decrementProduct: (productId: string) => void;
   removeProduct: (productId: string) => void;
+  setProductQuantity: (productId: string, quantity: number) => void;
   setLineDiscount: (productId: string, discountTotal: number) => void;
   clearCart: () => void;
   setPaymentMethod: (method: CartState["selectedPaymentMethod"]) => void;
@@ -71,6 +72,26 @@ export const useCartStore = create<CartStore>()(
     removeProduct: (productId) =>
       set((state) => ({
         lines: state.lines.filter((line) => line.product.id !== productId),
+      })),
+    setProductQuantity: (productId, quantity) =>
+      set((state) => ({
+        lines: state.lines.map((line) => {
+          if (line.product.id !== productId) {
+            return line;
+          }
+
+          const nextQuantity = Number.isFinite(quantity)
+            ? Math.trunc(quantity)
+            : 1;
+
+          return {
+            ...line,
+            quantity: Math.min(
+              Math.max(nextQuantity, 1),
+              line.product.stockOnHand,
+            ),
+          };
+        }),
       })),
     setLineDiscount: (productId, discountTotal) =>
       set((state) => ({

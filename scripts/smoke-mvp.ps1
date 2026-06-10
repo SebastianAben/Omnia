@@ -1,6 +1,5 @@
 param(
-  [string]$ApiBaseUrl = "http://localhost:4000/api/v1",
-  [string]$ShopeeWebhookSecret = "local-shopee-webhook-secret"
+  [string]$ApiBaseUrl = "http://localhost:4000/api/v1"
 )
 
 $ErrorActionPreference = "Stop"
@@ -68,14 +67,14 @@ Assert-Success -Response $adminLogin -Name "HQ admin login"
 $adminToken = $adminLogin.data.token
 $adminHeaders = @{ Authorization = "Bearer $adminToken" }
 
-$products = Invoke-Json -Method "GET" -Url "$ApiBaseUrl/products"
+$products = Invoke-Json -Method "GET" -Url "$ApiBaseUrl/products" -Headers $adminHeaders
 Assert-Success -Response $products -Name "product master data"
 
-$branches = Invoke-Json -Method "GET" -Url "$ApiBaseUrl/branches"
+$branches = Invoke-Json -Method "GET" -Url "$ApiBaseUrl/branches" -Headers $adminHeaders
 Assert-Success -Response $branches -Name "branch master data"
 
 $branchId = $branches.data[0].id
-$registers = Invoke-Json -Method "GET" -Url "$ApiBaseUrl/registers"
+$registers = Invoke-Json -Method "GET" -Url "$ApiBaseUrl/registers" -Headers $adminHeaders
 Assert-Success -Response $registers -Name "register master data"
 
 $register = $registers.data | Where-Object { $_.branch_id -eq $branchId } | Select-Object -First 1
@@ -168,10 +167,13 @@ if ($duplicate.data.result_status -ne "duplicate_ignored") {
 $dashboard = Invoke-Json -Method "GET" -Url "$ApiBaseUrl/dashboard/central" -Headers $adminHeaders
 Assert-Success -Response $dashboard -Name "executive dashboard API"
 
-$shopeeHealth = Invoke-Json -Method "GET" -Url "$ApiBaseUrl/monitoring/integrations/shopee" -Headers $adminHeaders
-Assert-Success -Response $shopeeHealth -Name "Shopee integration health"
-
 $ai = Invoke-Json -Method "GET" -Url "$ApiBaseUrl/ai/insights" -Headers $adminHeaders
-Assert-Success -Response $ai -Name "AI insight API"
+Assert-Success -Response $ai -Name "LLM insight API"
+
+$llmGeneration = Invoke-Json -Method "POST" -Url "$ApiBaseUrl/ai/insights/generate" -Headers $adminHeaders -TimeoutSec 30
+Assert-Success -Response $llmGeneration -Name "LLM insight generation trigger"
+if ($llmGeneration.data.status -notin @("success", "failed", "insufficient_data", "cached")) {
+  throw "Unexpected LLM generation status: $($llmGeneration.data.status)"
+}
 
 Write-Host "MVP smoke checks completed."

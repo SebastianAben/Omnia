@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, cn } from "@omnia/ui";
 import {
   AlertTriangle,
@@ -24,6 +24,11 @@ import {
   type ProductPerformance,
   type SyncHealth,
 } from "@/features/dashboard/dashboard-service";
+import {
+  buildDashboardFreshness,
+  formatFreshnessTimestamp,
+  type DashboardFreshness,
+} from "@/features/dashboard/dashboard-freshness";
 import { formatRupiah } from "@/features/pos/pos-utils";
 import { roleLabels, useAppState } from "@/lib/app-state";
 
@@ -36,6 +41,7 @@ export function DashboardWorkspace() {
   const [exportState, setExportState] = useState<
     "idle" | "exporting" | "error" | "truncated"
   >("idle");
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const scope: DashboardScope =
     role === "supervisor"
       ? "branch"
@@ -62,6 +68,20 @@ export function DashboardWorkspace() {
     token,
     canReadAudit,
   );
+  const freshness = useMemo(
+    () =>
+      buildDashboardFreshness({
+        lastRefreshedAt,
+        syncHealth: dashboard.data?.sync_health,
+      }),
+    [dashboard.data?.sync_health, lastRefreshedAt],
+  );
+
+  useEffect(() => {
+    if (dashboard.dataUpdatedAt > 0) {
+      setLastRefreshedAt(new Date(dashboard.dataUpdatedAt).toISOString());
+    }
+  }, [dashboard.dataUpdatedAt]);
 
   if (!token) {
     return (
@@ -111,7 +131,11 @@ export function DashboardWorkspace() {
         ) : null}
         <Button
           className="h-9"
-          onClick={() => void dashboard.refetch()}
+          onClick={() =>
+            void dashboard.refetch().then(() => {
+              setLastRefreshedAt(new Date().toISOString());
+            })
+          }
           type="button"
           variant="secondary"
         >
@@ -138,6 +162,11 @@ export function DashboardWorkspace() {
           </Button>
         ) : null}
       </div>
+      <FreshnessBand
+        filters={filters}
+        freshness={freshness}
+        scope={scope}
+      />
       {exportState === "error" ? (
         <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           Export failed. Check access, filters, or backend availability.
@@ -205,6 +234,64 @@ export function DashboardWorkspace() {
         </Panel>
       </div>
     </WorkspacePanel>
+  );
+}
+
+function FreshnessBand({
+  filters,
+  freshness,
+  scope,
+}: {
+  filters: DashboardFilters;
+  freshness: DashboardFreshness;
+  scope: DashboardScope;
+}) {
+  const stateTone =
+    freshness.syncState === "fresh"
+      ? "success"
+      : freshness.syncState === "stale"
+        ? "warning"
+        : "neutral";
+
+  return (
+    <div className="mb-4 grid gap-3 rounded-2xl border border-line bg-white px-4 py-3 text-sm shadow-[0_10px_24px_-22px_rgba(15,23,42,0.45)] lg:grid-cols-[1.1fr_1fr_1fr_auto]">
+      <FreshnessItem
+        label="Source"
+        value={
+          scope === "branch"
+            ? "Central branch data, refreshed on demand"
+            : "Central consolidated data, refreshed on demand"
+        }
+      />
+      <FreshnessItem
+        label="Period"
+        value={`${formatFreshnessTimestamp(filters.from)} - ${formatFreshnessTimestamp(filters.to)}`}
+      />
+      <FreshnessItem
+        label="Last refreshed"
+        value={formatFreshnessTimestamp(freshness.lastRefreshedAt)}
+      />
+      <div className="flex items-center justify-between gap-3 lg:justify-end">
+        <FreshnessItem
+          label="Last sync"
+          value={formatFreshnessTimestamp(freshness.lastSyncedAt)}
+        />
+        <Badge tone={stateTone}>{freshness.syncState}</Badge>
+      </div>
+    </div>
+  );
+}
+
+function FreshnessItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-xs font-semibold uppercase text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 truncate text-sm font-medium text-slate-950">
+        {value}
+      </div>
+    </div>
   );
 }
 

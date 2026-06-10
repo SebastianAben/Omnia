@@ -44,6 +44,9 @@ Untuk event shift:
 - `produced_by_user_id` harus sama dengan bearer user.
 - Satu register hanya boleh memiliki satu shift `OPEN`.
 - Close hanya valid untuk shift lokal/pusat yang masih `OPEN`.
+- `shift.closed` boleh membawa metadata `reconciliation` untuk total sales,
+  cash, non-cash, expected cash, closing cash, variance, dan pending transaction
+  warning; metadata ini tidak membuat migrasi kolom pusat baru pada MVP.
 - Duplicate event ID dikembalikan sebagai hasil idempotent.
 
 ## Transaction Bundle
@@ -75,7 +78,7 @@ Aturan:
 - `event_id` atau `bundle_id` tidak boleh diproses dua kali sebagai data baru.
 - Duplicate valid dikembalikan sebagai success/idempotent result.
 - Entity final seperti transaksi completed tidak boleh dioverwrite sembarang.
-- Webhook Shopee duplicate tidak boleh membuat order ganda.
+- Marketplace/Shopee webhook processing is no longer active MVP scope.
 
 ## Retry dan Replay
 
@@ -122,4 +125,4 @@ Minimum metrics:
 - last successful sync
 - duplicate event count
 - branch offline duration
-- integration job failures
+- LLM generation job failures

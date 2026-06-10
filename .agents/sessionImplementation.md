@@ -2,12 +2,12 @@
 
 ## Document Contract
 
-| Field | Value |
-| --- | --- |
-| Status | Canonical implementation roadmap |
-| Source of truth | `.agents/PRD.md` |
+| Field             | Value                                                   |
+| ----------------- | ------------------------------------------------------- |
+| Status            | Canonical implementation roadmap                        |
+| Source of truth   | `.agents/PRD.md`                                        |
 | Supporting status | `.agents/sessionHandoff.md`, `docs/12-actual-status.md` |
-| Purpose | Function-by-function backend and frontend delivery plan |
+| Purpose           | Function-by-function backend and frontend delivery plan |
 
 Implementation follows product functions and operational flows instead of broad
 backend/frontend batches. Each function is delivered as a vertical slice:
@@ -236,7 +236,7 @@ Frontend scope:
 - Recompute checkout totals and authoritative local stock in Electron main
   process instead of trusting renderer totals.
 - Display local receipt history and receipt preview.
-- Keep checkout independent from dashboard, Shopee, AI, and central uptime.
+- Keep checkout independent from dashboard, LLM insights, and central uptime.
 
 Exit criteria:
 
@@ -351,63 +351,83 @@ Exit criteria:
 - Export reports truncation and protects spreadsheet consumers.
 - Dashboard failure does not affect local POS.
 
-## Phase/Stage 9 - Shopee Integration
+## Phase/Stage 9 - Remove Shopee Integration
 
-Status: Implemented for mock/sandbox-ready MVP; real credentials pending.
-
-PRD mapping:
-
-- Shopee Integration.
-- Shopee Integration user flow.
-
-Backend scope:
-
-- Store registration, SKU mapping, order import/detail, webhook ingestion,
-  integration health, and retry.
-- Protect duplicate webhook/order processing.
-- Persist integration jobs/logs and audit-relevant actions.
-
-Frontend scope:
-
-- HQ store, mapping, order, detail, health, and retry workspace.
-- Gate protected queries until authenticated HQ access exists.
-- Provide mapping errors, empty states, loading, and retry feedback.
-- Do not expose a UI for backend-to-backend webhook ingestion.
-
-Exit criteria:
-
-- Duplicate webhook does not duplicate internal orders.
-- Mapping and retry operations are authenticated and auditable.
-- Frontend calls only Omnia backend endpoints.
-- Real sandbox credential validation is completed or explicitly deferred.
-
-## Phase/Stage 10 - AI Insights
-
-Status: Implemented as advisory MVP.
+Status: Implemented for active surfaces; legacy marketplace schema remains inert pending data-retention cleanup decision.
 
 PRD mapping:
 
-- AI Insights.
-- AI Insights user flow.
+- Removed/deprecated marketplace integration scope.
+- Product scope now excludes Shopee from MVP and active product behavior.
 
 Backend scope:
 
-- General insights, low-stock insights, and stockout predictions.
-- Return severity, confidence, reference data, and insufficient-data outcomes.
-- Keep AI advisory-only.
+- Keep Shopee controllers, webhook endpoints, monitoring endpoints, services,
+  DTOs, env requirements, seed/demo data, smoke checks, and API docs removed or
+  deprecated from active scope.
+- Decide whether legacy marketplace tables remain as inert historical schema or
+  receive a follow-up migration after data-retention needs are confirmed.
+- Ensure removing Shopee does not affect auth, POS, inventory, sync, dashboard,
+  reports, audit, or LLM insight generation.
 
 Frontend scope:
 
-- HQ/Executive AI workspace with filters and separate insight categories.
-- Display severity, confidence, references, loading, empty, and error states.
-- Never perform inventory, pricing, or order mutations from an insight.
+- Remove Shopee navigation, routes, services, query hooks, UI workspace, and
+  status/smoke references.
+- Remove user-facing copy that presents Omnia as Shopee/marketplace integrated.
+- Keep layout and role routing stable after menu removal.
 
 Exit criteria:
 
-- AI output is traceable to reference data.
-- Insufficient data is represented without fabricated confidence.
+- No active Shopee route is exposed in desktop navigation.
+- No active Shopee endpoint is documented as MVP API.
+- Smoke scripts and README no longer require Shopee configuration.
+- Typecheck, lint, build, and relevant backend tests pass after removal.
+
+## Phase/Stage 10 - LLM Insights
+
+Status: Implemented for MVP; live provider validation and runtime/UAT acceptance pending.
+
+PRD mapping:
+
+- LLM-powered operational insights.
+- LLM Insights user flow.
+
+Backend scope:
+
+- Maintain server-side LLM provider configuration and API key validation; credentials
+  must never reach the renderer or local SQLite.
+- Generate insights from bounded central DB context using explicit prompt
+  versions and structured output schemas.
+- Validate LLM output before persistence; reject malformed, unsafe, or
+  unsupported action-like output.
+- Persist severity, confidence, recommendation, reference data, provider/model
+  metadata, prompt version, generation job status, errors, and timestamps.
+- Maintain caching/TTL, cooldown reuse, and retry/rate-limit behavior so dashboard/POS paths are not
+  blocked by provider latency or failure.
+- Keep LLM advisory-only; it cannot mutate inventory, price, order, payment,
+  sync, master data, or auth state.
+- Add tests for missing API key, provider failure, malformed output,
+  insufficient data, unauthorized roles, and advisory-only constraints.
+
+Frontend scope:
+
+- Rename/align AI surfaces as LLM Insights where appropriate.
+- Show generation status, stale/cache state, provider failure, insufficient-data
+  state, severity, confidence, references, and recommendation text.
+- Provide explicit manual refresh/generate action for authorized roles.
+- Never expose provider API keys or prompt internals in the renderer.
+- Never provide one-click operational mutation from an insight.
+
+Exit criteria:
+
+- LLM output is traceable to reference data and provider/prompt metadata.
+- Role-based wording is generated once per batch and selected server-side for
+  Executive versus HQ Admin views.
+- Insufficient data is represented without fabricated certainty.
 - Unauthorized roles are rejected by backend.
-- AI failure cannot block POS or sync.
+- Missing/invalid API key and provider failures are clear, non-fatal states.
+- LLM failure cannot block POS, shift, inventory, sync, dashboard, or reporting.
 
 ## Phase/Stage 11 - Deployment, Desktop Packaging, and Operational Hardening
 
@@ -452,8 +472,8 @@ Execution:
 - Run Electron login, refresh, logout, restart persistence, and role routing.
 - Run shift, offline checkout, receipt, inventory adjustment, reconnect, and
   sync replay.
-- Verify branch scope, forbidden roles, duplicate sync, Shopee duplicate, and AI
-  insufficient-data behavior.
+- Verify branch scope, forbidden roles, duplicate sync, LLM missing-key/provider
+  failure, malformed-output rejection, and insufficient-data behavior.
 - Run packaged Electron smoke on the target operating system.
 - Record UAT findings, known risks, deferred scope, and recovery notes.
 
@@ -467,14 +487,162 @@ Exit criteria:
 - Packaged desktop readiness criteria pass.
 - `.agents/sessionHandoff.md` accurately records remaining risk and next action.
 
+## Next Implementation Phases
+
+These phases track incomplete or partial features discovered from the latest
+feature-completeness review. They intentionally exclude marketplace/Shopee work.
+
+## Phase/Stage 13 - Close Shift Auto Reconciliation
+
+Status: Implemented for MVP; direct Electron runtime smoke and UAT acceptance
+pending.
+
+Goal:
+
+- Complete Auto Reconciliation for cashier shift closing.
+
+Implementation plan:
+
+- Compute shift-scoped totals from local transactions before close:
+  total sales, total cash payments, total non-cash payments, expected cash,
+  cashier-entered closing cash, and variance.
+- Show a close-shift preview before confirmation.
+- Keep cashier close flow available, but make variance clearly visible before
+  saving the close event.
+- Persist reconciliation summary in the local shift record and `shift.closed`
+  sync payload metadata without destructive central migration.
+- Preserve existing opening/closing cash validation, active shift guard, and
+  sync queue behavior.
+
+Exit criteria:
+
+- Cashier can see total sales, cash, non-cash, expected cash, closing cash, and
+  variance before closing shift.
+- Closing a shift records the reconciliation summary locally.
+- Variance does not silently pass; it is visible in the UI and replay payload.
+- Checkout remains independent from dashboard, LLM, and central connectivity.
+
+## Phase/Stage 14 - High-Volume POS Transaction UX
+
+Status: Implemented for MVP; direct Electron runtime smoke and UAT acceptance
+pending.
+
+Goal:
+
+- Make repeated/many-product checkout faster and easier without weakening stock
+  and payment guards.
+
+Implementation plan:
+
+- Optimize search/scan product flow for SKU, barcode, and product-name entry.
+- Add keyboard-friendly add-to-cart, quantity adjustment, payment, and checkout
+  paths.
+- Keep product rendering bounded and responsive for larger catalogs.
+- Preserve stock-bounded cart behavior and no-out-of-stock add behavior at UI,
+  cart store, Electron main, and backend/sync layers.
+- Keep POS flow focused; do not add dashboard, LLM, or decorative UI work to
+  the checkout critical path.
+
+Exit criteria:
+
+- Cashier can complete many-product transactions with fewer pointer interactions.
+- Out-of-stock products still cannot enter the cart.
+- Quantity cannot exceed available local stock.
+- POS remains responsive with realistic catalog size.
+
+## Phase/Stage 15 - Smart Stock Notifications
+
+Status: Implemented for MVP; direct Electron runtime smoke and UAT acceptance
+pending.
+
+Goal:
+
+- Complete the notification part of smart stock management.
+
+Implementation plan:
+
+- Add in-app low-stock and out-of-stock notifications from local/central
+  inventory data.
+- Use existing inventory thresholds and stock movement state.
+- Do not add external push notification infrastructure in this phase.
+- Keep notifications non-blocking; they must not prevent checkout, shift close,
+  inventory adjustment, sync replay, or LLM insight reading.
+
+Exit criteria:
+
+- Users can see actionable low-stock/out-of-stock warnings in relevant
+  operational screens.
+- Notifications identify product, branch/source, quantity on hand, and threshold.
+- Notification failure does not block POS or inventory mutation flows.
+
+## Phase/Stage 16 - Dashboard Freshness and Prediction Validation
+
+Status: Implemented for MVP; live Gemini validation with a real key, direct
+runtime smoke, and UAT acceptance pending.
+
+Goal:
+
+- Clarify and harden Dashboard Real Time and Prediction behavior.
+
+Implementation plan:
+
+- Document and implement dashboard semantics as query/refresh-based freshness,
+  not websocket/streaming realtime.
+- Add freshness indicators such as last synced, last refreshed, and last LLM
+  generation time where data is displayed.
+- Validate live Gemini prediction/insight generation with a real `LLM_API_KEY`
+  and representative central data.
+- Keep predictions advisory-only and visible through LLM Insights; they must not
+  mutate stock, price, order, payment, sync, or master data.
+
+Exit criteria:
+
+- Dashboard clearly shows when central data was refreshed or synced.
+- Users are not misled into believing the dashboard is true streaming realtime.
+- Live Gemini generation succeeds or returns a controlled provider/key/rate-limit
+  state.
+- Executive and HQ Admin role wording remains selected server-side.
+
+## Phase/Stage 17 - UI/UX Consistency UAT Polish
+
+Status: Implemented for MVP; direct runtime UAT acceptance pending.
+
+Goal:
+
+- Improve repetitive operational workflows after core runtime validation.
+
+Implementation plan:
+
+- Review POS, close shift, inventory adjustment, sync status, dashboard, and LLM
+  insight flows through UAT.
+- Normalize copy, spacing, empty/error/loading states, button hierarchy, and
+  repeated controls.
+- Prioritize speed and clarity over decorative changes.
+- Keep the Figma/Stitch visual direction as the polish reference when available.
+
+Exit criteria:
+
+- UAT users can repeat cashier and supervisor workflows without confusing UI
+  state changes.
+- Common error states explain the action needed.
+- UI polish does not weaken permission, local-first, stock, sync, or LLM safety
+  boundaries.
+
 ## Recommended Continuation
 
 Do not restart from Phase 0. Review current status and continue from the first
 unmet exit criterion:
 
-1. Complete Phase 2 Electron auth runtime smoke.
-2. Complete Phase 7 central sync monitoring UI if accepted for MVP/UAT.
-3. Complete Phase 6 central inventory UI if operationally required.
-4. Complete Phase 3 HQ master-data UI only for accepted CRUD scope.
-5. Execute Phase 11 packaged desktop validation.
-6. Close with Phase 12 runtime acceptance and UAT.
+1. Run direct Electron runtime smoke for Phase 13 Close Shift Auto
+   Reconciliation.
+2. Complete Phase 2 Electron auth runtime smoke.
+3. Run live Gemini validation and updated smoke for Phase 10 LLM Insights.
+4. Execute Phase 11 packaged desktop validation.
+5. Run direct Electron runtime smoke for Phase 14 High-Volume POS Transaction UX.
+6. Run direct Electron runtime smoke for Phase 15 Smart Stock Notifications.
+7. Run live Gemini/runtime validation for Phase 16 Dashboard Freshness and
+   Prediction Validation.
+8. Run Phase 17 UI/UX Consistency UAT Polish checklist.
+9. Complete Phase 7 central sync monitoring UI if accepted for MVP/UAT.
+10. Complete Phase 6 central inventory UI if operationally required.
+11. Close with Phase 12 runtime acceptance and UAT.

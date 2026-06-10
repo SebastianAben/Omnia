@@ -2,6 +2,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Post,
   Query,
   Req,
   UseGuards,
@@ -27,7 +28,7 @@ export class AiController {
 
   @Get("insights")
   @ApiOkResponse({
-    description: "AI advisory insights for HQ and analyst roles.",
+    description: "LLM advisory insights for HQ and analyst roles.",
   })
   insights(
     @Req() request: RequestWithUser,
@@ -35,7 +36,25 @@ export class AiController {
   ) {
     this.assertCanReadAi(request.user);
 
-    return this.aiService.listInsights(query);
+    return this.aiService.listInsights(query, request.user.role_code);
+  }
+
+  @Post("insights/generate")
+  @ApiOkResponse({
+    description: "Trigger LLM insight generation for HQ and analyst roles.",
+  })
+  generateInsights(@Req() request: RequestWithUser) {
+    this.assertCanReadAi(request.user);
+
+    return this.aiService.generateInsights();
+  }
+
+  @Get("generation-jobs")
+  @ApiOkResponse({ description: "Recent LLM insight generation jobs." })
+  generationJobs(@Req() request: RequestWithUser) {
+    this.assertCanReadAi(request.user);
+
+    return this.aiService.listGenerationJobs();
   }
 
   @Get("insights/low-stock")
@@ -46,10 +65,13 @@ export class AiController {
   ) {
     this.assertCanReadAi(request.user);
 
-    return this.aiService.listInsights({
-      branch_id: branchId,
-      insight_type: "low_stock_alert",
-    });
+    return this.aiService.listInsights(
+      {
+        branch_id: branchId,
+        insight_type: "low_stock_alert",
+      },
+      request.user.role_code,
+    );
   }
 
   @Get("insights/stockout-predictions")
@@ -60,10 +82,13 @@ export class AiController {
   ) {
     this.assertCanReadAi(request.user);
 
-    return this.aiService.listInsights({
-      branch_id: branchId,
-      insight_type: "stockout_prediction",
-    });
+    return this.aiService.listInsights(
+      {
+        branch_id: branchId,
+        insight_type: "stockout_prediction",
+      },
+      request.user.role_code,
+    );
   }
 
   private assertCanReadAi(user: CurrentUser) {
@@ -71,7 +96,7 @@ export class AiController {
 
     if (role.includes("cashier") || role.includes("supervisor")) {
       throw new ForbiddenException(
-        "AI insights are available for HQ Admin and Executive / Analyst roles",
+        "LLM insights are available for HQ Admin and Executive / Analyst roles",
       );
     }
   }

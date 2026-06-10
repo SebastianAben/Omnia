@@ -4,7 +4,7 @@ This file records actual AI/agent progress. Update this file at the end of every
 
 ## Current Project State
 
-Date: 2026-06-07
+Date: 2026-06-09
 
 Omnia documentation has been reorganized into concise numbered documents under `docs/`. The `.agents/` folder has been created to guide future agent sessions.
 
@@ -17,22 +17,22 @@ They do not prove that canonical product stages were completed in order.
 The former "stage 13" label was invalid. Its code remains valid, but it maps to
 authentication/session and desktop-hardening scope.
 
-| Historical session label | Actual work | Canonical Phase/Stage |
-| --- | --- | --- |
-| Initial access-scope work | Backend permission and branch scope | 2, 3, 6, 7, 8 |
-| First improvement | Transaction bundle validation | 5, 7 |
-| Second improvement | Sync consistency validation | 5, 7 |
-| Third improvement | POS, shift, inventory, and local queue hardening | 4, 5, 6, 7 |
-| Fourth improvement | Dashboard, audit, Shopee, and AI query gating | 8, 9, 10 |
-| Fifth improvement | Release build and smoke-script hardening | 11, 12 |
-| Sixth improvement | Electron and SQLite deployment readiness | 11 |
-| Seventh improvement | Basic sales CSV export | 8 |
-| Eighth improvement | CSV formula and filename hardening | 8 |
-| Ninth improvement | CSV truncation completeness metadata | 8 |
-| Tenth improvement | Dashboard/report date-window validation | 8 |
-| Eleventh improvement | Access-token codec hardening | 2 |
-| Twelfth improvement | Refresh rotation and logout sessions | 2 |
-| Former "thirteenth" improvement | Electron encrypted token persistence | 2, 11 |
+| Historical session label        | Actual work                                      | Canonical Phase/Stage |
+| ------------------------------- | ------------------------------------------------ | --------------------- |
+| Initial access-scope work       | Backend permission and branch scope              | 2, 3, 6, 7, 8         |
+| First improvement               | Transaction bundle validation                    | 5, 7                  |
+| Second improvement              | Sync consistency validation                      | 5, 7                  |
+| Third improvement               | POS, shift, inventory, and local queue hardening | 4, 5, 6, 7            |
+| Fourth improvement              | Dashboard, audit, Shopee, and AI query gating    | 8, 9, 10              |
+| Fifth improvement               | Release build and smoke-script hardening         | 11, 12                |
+| Sixth improvement               | Electron and SQLite deployment readiness         | 11                    |
+| Seventh improvement             | Basic sales CSV export                           | 8                     |
+| Eighth improvement              | CSV formula and filename hardening               | 8                     |
+| Ninth improvement               | CSV truncation completeness metadata             | 8                     |
+| Tenth improvement               | Dashboard/report date-window validation          | 8                     |
+| Eleventh improvement            | Access-token codec hardening                     | 2                     |
+| Twelfth improvement             | Refresh rotation and logout sessions             | 2                     |
+| Former "thirteenth" improvement | Electron encrypted token persistence             | 2, 11                 |
 
 Canonical completion must be determined from exit criteria in
 `.agents/sessionImplementation.md`, not from the count of historical sessions.
@@ -41,6 +41,180 @@ acceptance have not passed.
 
 ## Latest Completed Work
 
+- 2026-06-10 12:54 WIB: implemented Phase 17 UI/UX Consistency UAT Polish.
+- Added shared frontend UI state primitives for inline feedback and state panels
+  plus tested operational copy helpers for checkout guard messages and sync
+  status next-action wording.
+- POS checkout warnings now explain the next cashier action for closed shift,
+  empty cart, insufficient payment, stock warnings, and successful local save.
+- Sync Status now uses the shared button/state pattern, actionable pending/
+  failed/conflict/synced copy, clearer empty queue text, and a UAT handoff
+  warning when failed/conflict events remain.
+- Receipts and Audit now use shared state panels for empty, login-required,
+  restricted, loading, and backend unavailable states.
+- Shift and Inventory copy was tightened for handoff-sensitive warnings without
+  changing local-first, stock, sync, permission, or LLM behavior.
+- Added `docs/17-uat-polish-checklist.md` and linked it from `docs/01-index.md`
+  with role-based UAT paths for Cashier, Supervisor, HQ Admin, and
+  Executive/Analyst.
+- Validation passed: focused operational copy and existing desktop helper tests
+  via `tsx`, `pnpm --filter @omnia/desktop-app typecheck`,
+  `pnpm --filter @omnia/desktop-app lint`, and `pnpm build`.
+- Remaining risk: direct Electron runtime UAT, packaged desktop validation, and
+  live Gemini validation remain pending.
+- Next recommended step: execute the Phase 17 UAT checklist, then complete
+  Phase 12 final MVP acceptance/handoff once runtime and packaged checks pass.
+- 2026-06-10 12:45 WIB: implemented Phase 16 Dashboard Freshness and Prediction
+  Validation.
+- Added frontend dashboard freshness helper/tests for query/refetch-based
+  freshness, single-branch sync timestamps, unknown sync state, and conservative
+  central sync aggregation.
+- Dashboard now shows a freshness band with central-data source wording, selected
+  period, last refreshed time, last successful sync time, and fresh/stale/unknown
+  sync state without implying websocket/streaming realtime.
+- Added frontend LLM generation UI-state helper/tests for success, cached,
+  insufficient data, missing API key, provider timeout/error, invalid output,
+  and unsafe output.
+- LLM Insights now shows normalized generation status details, latest insight
+  generation timestamp, job finished time, and provider/model details when
+  returned by generation.
+- No backend API, Prisma, SQLite, or Electron IPC changes were made; predictions
+  remain advisory-only and no mutation controls were added.
+- Validation passed: focused freshness/status tests via `tsx`,
+  `pnpm --filter @omnia/desktop-app typecheck`, and
+  `pnpm --filter @omnia/desktop-app lint`, and `pnpm build`.
+- Remaining risk: live Gemini validation with a real `LLM_API_KEY`, Dashboard
+  freshness runtime smoke, and LLM Insights runtime/UAT acceptance are pending.
+- Next recommended step: Phase 17 UI/UX Consistency UAT Polish after Phase 16
+  runtime/live-provider validation is captured.
+- 2026-06-10 12:07 WIB: implemented Phase 15 Smart Stock Notifications.
+- Added computed frontend-only stock notification types/helper for local and
+  central sources, classifying `out_of_stock` as critical and `low_stock` as
+  warning from existing quantity and threshold values.
+- Inventory Operations now shows a smart stock notification summary, urgent
+  local alert list, alert counts, and distinct table statuses for Out, Low, and
+  Ready without blocking stock adjustment.
+- POS now reuses the same helper for visible catalog warnings and clearer Out
+  versus Low product-card status while preserving existing stock guards,
+  checkout flow, local store, sync, and payment behavior.
+- Exposed a frontend `useInventoryAlerts` hook for the existing central
+  `/reports/inventory-alerts` endpoint; no backend API, Prisma, SQLite, or
+  Electron IPC changes were made.
+- Added focused helper unit coverage for critical/warning classification,
+  threshold exclusion, critical-first sorting, zero-threshold handling, and
+  summary counts.
+- Validation passed: focused stock notification tests via `tsx`,
+  `pnpm --filter @omnia/desktop-app typecheck`, and
+  `pnpm --filter @omnia/desktop-app lint`, and `pnpm build`.
+- Remaining risk: verify Inventory and POS notification rendering in
+  `dev:desktop`/packaged Electron with representative local stock data.
+- Next recommended step: Phase 16 Dashboard Freshness and Prediction Validation
+  after Phase 15 Electron runtime smoke or UAT feedback is captured.
+- 2026-06-10 11:53 WIB: implemented Phase 14 High-Volume POS Transaction UX.
+- POS search now ranks exact barcode, exact SKU, prefix, then name/category
+  matches, and caps rendered catalog results to keep large catalogs responsive.
+- Search Enter now supports keyboard-wedge scanner flow: one exact barcode/SKU
+  match is added to cart, the search field is cleared, and focus stays ready for
+  repeated scanning; ambiguous/no-stock/stock-limit cases show inline feedback.
+- Cart now supports direct quantity input with store-level stock clamping, while
+  preserving existing add/decrement/remove, discount, payment, shift, Electron
+  local-store, and backend sync guards.
+- Added keyboard-first POS actions for focusing search, checkout submit,
+  confirmed cart clear, and payment method selection without adding native
+  scanner/device integration.
+- Added focused desktop POS unit coverage for catalog ranking/bounded results,
+  exact-match detection, quantity clamping, minimum quantity, and out-of-stock
+  cart rejection.
+- Validation passed: focused POS tests via `tsx`,
+  `pnpm --filter @omnia/desktop-app typecheck`,
+  `pnpm --filter @omnia/desktop-app lint`, and `pnpm build`.
+- Runtime smoke: `next dev` on port 3001 served `/pos/` with HTTP 200. Port
+  3000 was already in use. Playwright was not available locally, so automated
+  browser interaction and direct Electron runtime smoke were not run.
+- Remaining risk: verify scanner Enter, quantity editing, shortcut behavior, and
+  checkout end-to-end in `dev:desktop`/packaged Electron with an open shift.
+- Next recommended step: Phase 15 Smart Stock Notifications after Phase 14
+  Electron runtime smoke or UAT feedback is captured.
+- 2026-06-10: implemented Phase 13 Close Shift Auto Reconciliation.
+- Close shift now computes local SQLite reconciliation preview for paid shift
+  transactions: total sales, cash payments, non-cash payments, opening cash,
+  expected cash, closing cash, variance, pending transaction count, and pending
+  transaction total.
+- Added Electron main-process reconciliation calculation and IPC preview bridge;
+  close shift recomputes the final snapshot in the main process before writing
+  the local shift close record and `shift.closed` sync payload metadata.
+- Added nullable local `shifts_local` reconciliation columns plus idempotent
+  local migration statements; no central Prisma migration was added.
+- Updated Shift UI to show reconciliation preview before close, highlight
+  non-zero variance, show pending transaction warnings, and keep close available.
+- Backend sync validation now explicitly accepts optional `shift.closed`
+  reconciliation metadata without persisting new central columns.
+- Added desktop reconciliation unit coverage and backend sync coverage for close
+  reconciliation metadata.
+- Validation passed: desktop reconciliation focused test via `tsx`,
+  `pnpm --filter @omnia/desktop-app typecheck`,
+  `pnpm --filter @omnia/desktop-app lint`,
+  `pnpm --filter @omnia/backend-api typecheck`,
+  `pnpm --filter @omnia/backend-api lint`,
+  `pnpm --filter @omnia/backend-api test:unit`, and `pnpm build`.
+- `pnpm smoke:mvp` failed because the running service returned 404 for
+  `/api/v1/health`; `/health` was reachable and identified itself as
+  `matria-api`, so the available runtime did not match the smoke script's
+  expected Omnia API prefix.
+- Remaining risk: direct Electron runtime/UAT smoke for close-shift preview and
+  packaged app behavior is still pending.
+- Next recommended step: Phase 14 High-Volume POS Transaction UX after runtime
+  smoke or UAT confirms the close-shift reconciliation flow.
+- 2026-06-10: updated `.agents/` feature completeness status and next
+  implementation phases based on the latest feature availability review.
+- Added feature completeness snapshot for Kasir Digital, Manajemen Stok Pintar
+  dan Notifikasi, Dashboard Real Time dan Prediksi, and Auto Reconciliation.
+- Added next implementation phases 13-17:
+  Close Shift Auto Reconciliation, High-Volume POS Transaction UX, Smart Stock
+  Notifications, Dashboard Freshness and Prediction Validation, and UI/UX
+  Consistency UAT Polish.
+- Marketplace/Shopee remains excluded from active scope and was not added to the
+  next phases.
+- Documentation/status update only; no application code changed. Validation
+  needed: formatting and grep checks only.
+- Next recommended step: implement Phase 13 Close Shift Auto Reconciliation.
+- 2026-06-09: implemented role-based LLM wording without refresh.
+- One Gemini request now requires and validates `role_variants.executive` and
+  `role_variants.hq_admin` per insight, stores both variants in
+  `AiInsight.referenceData`, keeps canonical persisted title/summary from the
+  HQ Admin variant, and strips `role_variants` from API responses.
+- `GET /ai/insights`, `/low-stock`, and `/stockout-predictions` now select
+  wording server-side from `request.user.role_code`: Executive/Analyst gets the
+  strategic variant, HQ Admin gets the operational variant.
+- Added Gemini usage controls: `LLM_MAX_INSIGHTS=8`,
+  `LLM_MAX_CONTEXT_ROWS=30`, and `LLM_GENERATION_COOLDOWN_MINUTES=60`.
+  `POST /ai/insights/generate` returns `cached` and does not call Gemini when a
+  fresh successful/insufficient-data generation plus persisted insight exists.
+- Updated frontend status copy for cached reuse; no refresh-wording button was
+  added.
+- Added backend unit coverage for required role variants, role-selected
+  responses, cache cooldown reuse, and forbidden cashier list access.
+- Validation passed: `pnpm --filter @omnia/backend-api typecheck`,
+  `pnpm --filter @omnia/backend-api lint`,
+  `pnpm --filter @omnia/backend-api test:unit`,
+  `pnpm --filter @omnia/desktop-app typecheck`,
+  `pnpm --filter @omnia/desktop-app lint`, and `pnpm build` using the bundled
+  Codex Python shim because the system `python` executable is absent.
+- `pnpm smoke:mvp` was not run because no backend was listening on
+  `localhost:4000`.
+- 2026-06-09: implemented the active scope change: removed Shopee from backend modules/routes/webhooks/monitoring/env/smoke seed/frontend navigation/page/service surfaces, while leaving legacy marketplace schema intact.
+- Implemented Gemini-backed LLM insight generation on the backend:
+  `POST /api/v1/ai/insights/generate`, `GET /api/v1/ai/generation-jobs`, LLM env validation/config, Gemini REST client, bounded central DB context, Zod structured output validation, advisory-only guardrails, missing-key/provider/timeout/malformed-output job states, and persisted provider/model metadata in insight reference data.
+- Updated desktop LLM Insights UI with user-facing "LLM Insights" copy, Generate action for HQ Admin/Executive roles, generation job/status display, and no operational mutation controls.
+- Added backend unit coverage for missing `LLM_API_KEY`, malformed output, unsafe operational mutation output, valid insight persistence metadata, and cashier/supervisor endpoint denial.
+- Updated smoke script to remove Shopee checks and trigger LLM generation with controlled statuses.
+- Validation passed: `pnpm --filter @omnia/backend-api typecheck`, `pnpm --filter @omnia/backend-api lint`, `pnpm --filter @omnia/backend-api test:unit`, `pnpm --filter @omnia/desktop-app typecheck`, `pnpm --filter @omnia/desktop-app lint`, and `pnpm build` using the bundled Codex Python shim because the system `python` executable is absent.
+- `pnpm smoke:mvp` was not run because no backend was listening on `localhost:4000`.
+- 2026-06-09: updated product/agent documentation for scope change; no application code changed.
+- Decision: remove Shopee from active MVP scope and replace rule-based AI target with LLM-backed insight generation.
+- Updated `.agents/PRD.md`, `.agents/sessionImplementation.md`, `.agents/rules.md`, `.agents/engineeringKnowledge.md`, and numbered docs to treat Phase/Stage 9 as Shopee removal and Phase/Stage 10 as LLM provider integration.
+- New priority before final MVP acceptance: remove/quarantine active Shopee backend/frontend/smoke/env/docs surfaces, then implement server-side LLM provider configuration, structured output validation, generation jobs, cache/TTL, missing-key/provider-failure handling, and advisory-only guardrails.
+- Validation: documentation whitespace check only; no typecheck/lint/build because no application code changed.
 - 2026-06-07: completed canonical Phase/Stage 7 offline sync reliability audit on branch `feat/improvement`; no GitHub push performed.
 - Decision: improve. Local replay now processes only due pending/failed events, keeps bounded batches, applies capped retry backoff, records next retry, and recovers stale queued items back to failed with actionable metadata.
 - Sync status UI now shows deferred replay count, next retry time, and last error per local queue item.
@@ -332,7 +506,9 @@ Automated tests were not run because no application code changed.
 
 Continue from unmet canonical exit criteria, not the old session count:
 
-1. Phase 2: run Electron login-refresh-logout and restart-persistence smoke.
-2. Phase 6/7: decide whether central inventory and sync-monitoring UI are MVP/UAT requirements.
-3. Phase 11: run packaged Electron validation on the target machine.
-4. Phase 12: run full smoke and UAT acceptance.
+1. Run `pnpm smoke:mvp` with backend/database/seed running to validate the updated LLM generation smoke path.
+2. Configure a real `LLM_API_KEY` in backend runtime and run one live Gemini generation test against seeded/representative central data.
+3. Phase 2: run Electron login-refresh-logout and restart-persistence smoke.
+4. Phase 6/7: decide whether central inventory and sync-monitoring UI are MVP/UAT requirements.
+5. Phase 11: run packaged Electron validation on the target machine.
+6. Phase 12: run full smoke and UAT acceptance.

@@ -1,19 +1,38 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Button } from "@omnia/ui";
 import { Minus, Plus, Search, Trash2 } from "lucide-react";
 
+import { InlineFeedback } from "@/components/ui-state";
 import {
   listLocalSyncQueue,
   saveCheckoutLocally,
 } from "@/features/local-first/local-checkout-repository";
 import { useAppState } from "@/lib/app-state";
+import {
+  buildStockNotifications,
+  getStockNotificationType,
+  summarizeStockNotifications,
+} from "@/features/inventory/stock-notifications";
+import { getCheckoutGuardMessage } from "@/features/uat/operational-copy";
 import { useCartStore } from "./cart-store";
 import { loadFallbackCatalog, loadPosCatalog } from "./product-service";
 import type { PaymentMethod, PaymentStatus } from "./pos-types";
-import { calculateCartTotals, filterCatalog, formatRupiah } from "./pos-utils";
+import {
+  calculateCartTotals,
+  findExactCatalogMatch,
+  formatRupiah,
+  getCatalogSearchResult,
+} from "./pos-utils";
 
 const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
   { value: "cash", label: "Cash" },
@@ -27,10 +46,14 @@ const paymentStatusOptions: Array<{ value: PaymentStatus; label: string }> = [
   { value: "pending", label: "Pending" },
 ];
 
+const catalogResultLimit = 24;
+
 export function PosWorkspace() {
   const [query, setQuery] = useState("");
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
+  const [catalogMessage, setCatalogMessage] = useState<string | null>(null);
   const [isCheckingOut, setCheckingOut] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const branch = useAppState((state) => state.branch);
   const token = useAppState((state) => state.token);
   const register = useAppState((state) => state.register);
@@ -42,6 +65,7 @@ export function PosWorkspace() {
   const addProduct = useCartStore((state) => state.addProduct);
   const decrementProduct = useCartStore((state) => state.decrementProduct);
   const removeProduct = useCartStore((state) => state.removeProduct);
+  const setProductQuantity = useCartStore((state) => state.setProductQuantity);
   const clearCart = useCartStore((state) => state.clearCart);
   const setLineDiscount = useCartStore((state) => state.setLineDiscount);
   const selectedPaymentMethod = useCartStore(
@@ -64,26 +88,46 @@ export function PosWorkspace() {
     () => (token ? (catalogQuery.data ?? []) : loadFallbackCatalog()),
     [catalogQuery.data, token],
   );
-  const filteredProducts = useMemo(
-    () => filterCatalog(products, query),
+  const catalogResult = useMemo(
+    () => getCatalogSearchResult(products, query, { limit: catalogResultLimit }),
     [products, query],
+  );
+  const visibleProducts = catalogResult.items;
+  const visibleStockNotifications = useMemo(
+    () =>
+      buildStockNotifications(
+        visibleProducts.map((product) => ({
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          branchName: branch.name,
+          quantityOnHand: product.stockOnHand,
+          threshold: product.minimumQuantity,
+          source: "local",
+        })),
+      ),
+    [branch.name, visibleProducts],
+  );
+  const visibleStockSummary = useMemo(
+    () => summarizeStockNotifications(visibleStockNotifications),
+    [visibleStockNotifications],
   );
   const totals = useMemo(() => calculateCartTotals(lines), [lines]);
   const canCheckout = shiftStatus === "open" && Boolean(activeShiftId);
 
-  const handleCheckout = async () => {
+  const handleCheckout = useCallback(async () => {
     if (!canCheckout) {
-      setCheckoutMessage("Buka shift sebelum menyimpan transaksi.");
+      setCheckoutMessage(getCheckoutGuardMessage("shift_closed"));
       return;
     }
 
     if (lines.length === 0) {
-      setCheckoutMessage("Cart masih kosong.");
+      setCheckoutMessage(getCheckoutGuardMessage("cart_empty"));
       return;
     }
 
     if (paymentStatus === "paid" && amountReceived < totals.grandTotal) {
-      setCheckoutMessage("Amount received is lower than total.");
+      setCheckoutMessage(getCheckoutGuardMessage("payment_insufficient"));
       return;
     }
 
@@ -107,7 +151,7 @@ export function PosWorkspace() {
       );
       clearCart();
       setCheckoutMessage(
-        `${result.transactionNo} tersimpan lokal. Event sync: ${result.eventId}.`,
+        `${result.transactionNo} saved locally. Review Sync Status when ready to replay event ${result.eventId}.`,
       );
     } catch (error) {
       setCheckoutMessage(
@@ -118,7 +162,118 @@ export function PosWorkspace() {
     } finally {
       setCheckingOut(false);
     }
+  }, [
+    activeShiftId,
+    amountReceived,
+    branch,
+    canCheckout,
+    clearCart,
+    lines,
+    paymentStatus,
+    register,
+    selectedPaymentMethod,
+    setPendingSyncCount,
+    totals,
+    user,
+  ]);
+
+  const handleExactSearchAdd = useCallback(() => {
+    const exactMatch = findExactCatalogMatch(products, query);
+
+    if (!exactMatch) {
+      setCatalogMessage(
+        query.trim()
+          ? "Tidak ada satu barcode atau SKU yang cocok persis."
+          : null,
+      );
+      return;
+    }
+
+    const existingQuantity =
+      lines.find((line) => line.product.id === exactMatch.id)?.quantity ?? 0;
+
+    if (exactMatch.stockOnHand <= 0) {
+      setCatalogMessage(`${exactMatch.name} sedang habis stok.`);
+      return;
+    }
+
+    if (existingQuantity >= exactMatch.stockOnHand) {
+      setCatalogMessage(
+        `${exactMatch.name} sudah mencapai stok tersedia (${exactMatch.stockOnHand}).`,
+      );
+      return;
+    }
+
+    addProduct(exactMatch);
+    setQuery("");
+    setCatalogMessage(`${exactMatch.name} ditambahkan ke cart.`);
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [addProduct, lines, products, query]);
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    handleExactSearchAdd();
   };
+
+  const handleClearCart = useCallback(() => {
+    if (lines.length === 0) {
+      return;
+    }
+
+    if (window.confirm("Kosongkan cart saat ini?")) {
+      clearCart();
+      setCheckoutMessage(null);
+      searchInputRef.current?.focus();
+    }
+  }, [clearCart, lines.length]);
+
+  useEffect(() => {
+    const handleShortcut = (event: globalThis.KeyboardEvent) => {
+      const target = event.target;
+      const isEditableTarget =
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
+      if (event.altKey) {
+        const optionIndex = Number(event.key) - 1;
+        const option = paymentOptions[optionIndex];
+
+        if (option) {
+          event.preventDefault();
+          setPaymentMethod(option.value);
+        }
+
+        return;
+      }
+
+      if (!isEditableTarget && event.key === "/") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === "F2") {
+        event.preventDefault();
+        void handleCheckout();
+        return;
+      }
+
+      if (event.key === "F3") {
+        event.preventDefault();
+        handleClearCart();
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [handleCheckout, handleClearCart, setPaymentMethod]);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_410px]">
@@ -164,10 +319,18 @@ export function PosWorkspace() {
             <input
               className="h-12 w-full rounded-2xl border border-line bg-white pl-11 pr-4 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-200/70"
               onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
               placeholder="Scan barcode, SKU, atau nama produk"
+              ref={searchInputRef}
               value={query}
             />
           </label>
+
+          {catalogMessage ? (
+            <div className="mt-3 rounded-2xl border border-line bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              {catalogMessage}
+            </div>
+          ) : null}
 
           {token && catalogQuery.isLoading ? (
             <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
@@ -177,7 +340,7 @@ export function PosWorkspace() {
             </div>
           ) : token && catalogQuery.isError ? (
             <CatalogState message="Katalog cabang tidak tersedia. Checkout dinonaktifkan sampai master data valid berhasil dimuat." />
-          ) : filteredProducts.length === 0 ? (
+          ) : visibleProducts.length === 0 ? (
             <div className="mt-5 rounded-3xl border border-dashed border-line bg-slate-50 px-5 py-12 text-center">
               <div className="text-base font-semibold text-slate-950">
                 Produk tidak ditemukan
@@ -187,58 +350,96 @@ export function PosWorkspace() {
               </p>
             </div>
           ) : (
-            <div className="mt-5 grid-flow-dense grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-              {filteredProducts.map((product) => {
-                const isLowStock =
-                  product.stockOnHand <= product.minimumQuantity;
+            <>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+                <span>
+                  Menampilkan {visibleProducts.length} dari{" "}
+                  {catalogResult.totalCount} produk.
+                </span>
+                {catalogResult.hasMore ? (
+                  <span className="font-medium text-slate-800">
+                    Persempit pencarian untuk hasil lainnya.
+                  </span>
+                ) : null}
+              </div>
 
-                return (
-                  <article
-                    className="group relative grid min-h-44 overflow-hidden rounded-3xl border border-line/80 bg-slate-50/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] transition duration-300 hover:-translate-y-1 hover:bg-white hover:shadow-lift"
-                    key={product.id}
-                  >
-                    <div className="min-w-0 pr-[4.75rem]">
-                      <div className="truncate text-base font-semibold tracking-[-0.02em] text-slate-950">
-                        {product.name}
-                      </div>
-                      <div className="mt-1 truncate text-xs font-medium text-slate-500">
-                        {product.sku} / {product.categoryName}
-                      </div>
-                    </div>
+              {visibleStockSummary.total > 0 ? (
+                <InlineFeedback className="mt-3" tone="warning">
+                  {visibleStockSummary.outOfStock} out of stock,{" "}
+                  {visibleStockSummary.lowStock} low stock dalam hasil yang
+                  tampil.
+                </InlineFeedback>
+              ) : null}
 
-                    <Badge
-                      className="absolute right-4 top-4 max-w-[4.25rem] justify-center"
-                      tone={isLowStock ? "warning" : "neutral"}
+              <div className="mt-3 grid-flow-dense grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                {visibleProducts.map((product) => {
+                  const stockStatus = getStockNotificationType({
+                    stockOnHand: product.stockOnHand,
+                    minimumQuantity: product.minimumQuantity,
+                  });
+
+                  return (
+                    <article
+                      className="group relative grid min-h-44 overflow-hidden rounded-3xl border border-line/80 bg-slate-50/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] transition duration-300 hover:-translate-y-1 hover:bg-white hover:shadow-lift"
+                      key={product.id}
                     >
-                      <span className="truncate">
-                        {product.stockOnHand} {product.unit}
-                      </span>
-                    </Badge>
-
-                    <div className="mt-auto grid grid-cols-[minmax(0,1fr)_6.25rem] items-end gap-3 pt-6">
-                      <div className="min-w-0">
-                        <div className="font-mono text-lg font-semibold tracking-[-0.03em] text-slate-950">
-                          {formatRupiah(product.price)}
+                      <div className="min-w-0 pr-[4.75rem]">
+                        <div className="truncate text-base font-semibold tracking-[-0.02em] text-slate-950">
+                          {product.name}
                         </div>
-                        <div className="mt-1 truncate text-xs text-slate-500">
-                          Min. stok {product.minimumQuantity}
+                        <div className="mt-1 truncate text-xs font-medium text-slate-500">
+                          {product.sku} / {product.categoryName}
                         </div>
                       </div>
-                      <Button
-                        className="h-10 w-full px-3"
-                        disabled={product.stockOnHand <= 0}
-                        onClick={() => addProduct(product)}
-                        type="button"
-                        variant="secondary"
+
+                      <Badge
+                        className="absolute right-4 top-4 max-w-[4.25rem] justify-center"
+                        tone={
+                          stockStatus === "out_of_stock"
+                            ? "danger"
+                            : stockStatus === "low_stock"
+                              ? "warning"
+                              : "neutral"
+                        }
                       >
-                        <Plus size={16} aria-hidden="true" />
-                        Tambah
-                      </Button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                        <span className="truncate">
+                          {stockStatus === "out_of_stock"
+                            ? "Out"
+                            : stockStatus === "low_stock"
+                              ? "Low"
+                              : `${product.stockOnHand} ${product.unit}`}
+                        </span>
+                      </Badge>
+
+                      <div className="mt-auto grid grid-cols-[minmax(0,1fr)_6.25rem] items-end gap-3 pt-6">
+                        <div className="min-w-0">
+                          <div className="font-mono text-lg font-semibold tracking-[-0.03em] text-slate-950">
+                            {formatRupiah(product.price)}
+                          </div>
+                          <div className="mt-1 truncate text-xs text-slate-500">
+                            Stok {product.stockOnHand} / min{" "}
+                            {product.minimumQuantity}
+                          </div>
+                        </div>
+                        <Button
+                          className="h-10 w-full px-3"
+                          disabled={product.stockOnHand <= 0}
+                          onClick={() => {
+                            addProduct(product);
+                            searchInputRef.current?.focus();
+                          }}
+                          type="button"
+                          variant="secondary"
+                        >
+                          <Plus size={16} aria-hidden="true" />
+                          Tambah
+                        </Button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </section>
@@ -256,6 +457,16 @@ export function PosWorkspace() {
           <Badge tone={totals.itemCount > 0 ? "success" : "neutral"}>
             {totals.itemCount} items
           </Badge>
+          <button
+            aria-label="Kosongkan cart"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={lines.length === 0}
+            onClick={handleClearCart}
+            title="Kosongkan cart"
+            type="button"
+          >
+            <Trash2 size={16} />
+          </button>
         </div>
 
         <div className="mt-5 grid max-h-[36dvh] gap-3 overflow-auto pr-1">
@@ -308,13 +519,34 @@ export function PosWorkspace() {
                     <Button
                       className="h-8 w-8 rounded-lg px-0"
                       disabled={line.quantity >= line.product.stockOnHand}
-                      onClick={() => addProduct(line.product)}
+                      onClick={() => {
+                        addProduct(line.product);
+                        searchInputRef.current?.focus();
+                      }}
                       type="button"
                       variant="ghost"
                     >
                       <Plus size={14} aria-hidden="true" />
                     </Button>
                   </div>
+                  <label className="sr-only" htmlFor={`quantity-${line.product.id}`}>
+                    Jumlah {line.product.name}
+                  </label>
+                  <input
+                    className="h-9 w-16 rounded-xl border border-line bg-white px-2 text-center font-mono text-sm font-semibold text-slate-950 outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-200/70"
+                    id={`quantity-${line.product.id}`}
+                    inputMode="numeric"
+                    min={1}
+                    max={line.product.stockOnHand}
+                    onChange={(event) =>
+                      setProductQuantity(
+                        line.product.id,
+                        Number(event.target.value || 1),
+                      )
+                    }
+                    type="number"
+                    value={line.quantity}
+                  />
                   <div className="font-mono text-sm font-semibold text-slate-950">
                     {formatRupiah(
                       line.product.price * line.quantity - line.discountTotal,
@@ -426,15 +658,20 @@ export function PosWorkspace() {
         </Button>
 
         {!canCheckout ? (
-          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Buka shift sebelum menyimpan transaksi.
-          </div>
+          <InlineFeedback className="mt-3" tone="warning">
+            {getCheckoutGuardMessage("shift_closed")}
+          </InlineFeedback>
         ) : null}
 
         {checkoutMessage ? (
-          <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <InlineFeedback
+            className="mt-3"
+            tone={
+              checkoutMessage.includes("saved locally") ? "success" : "warning"
+            }
+          >
             {checkoutMessage}
-          </div>
+          </InlineFeedback>
         ) : null}
       </aside>
     </div>

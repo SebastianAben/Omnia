@@ -1,10 +1,10 @@
 # Actual Status
 
-Tanggal review: 2026-06-07.
+Tanggal review: 2026-06-09.
 
 ## Kondisi Umum
 
-Omnia berada pada fase MVP release candidate secara kode dan dokumentasi. Fitur utama dari Sprint 0 sampai Sprint 7 sudah tersedia secara fungsional, tetapi belum production-ready sampai validasi runtime penuh, hardening auth/permission, migration target, dan UAT selesai.
+Omnia berada pada fase MVP release candidate secara kode. Integrasi Shopee sudah dihapus dari surface aktif dan AI rule-based sudah diganti menjadi LLM Insights berbasis provider Gemini dengan structured output. Fitur POS, inventory, sync, dashboard/reporting, audit, dan desktop runtime tetap menjadi baseline MVP; release readiness belum production-ready sampai validasi runtime penuh, hardening auth/permission, live LLM provider validation, dan UAT selesai.
 
 ## Sudah Ada
 
@@ -20,9 +20,9 @@ Backend:
 - Dashboard branch/central.
 - Reports sales summary, validasi date window, bounded CSV export dengan proteksi formula dan peringatan truncation, serta inventory alerts.
 - Audit logs.
-- Monitoring branch sync health dan Shopee health.
-- Shopee store, SKU mapping, order import, webhook, retry job.
-- AI insights, low stock, stockout prediction.
+- Monitoring branch sync health.
+- Active Shopee backend/frontend/env/smoke surface sudah dihapus; legacy marketplace schema masih dipertahankan inert sampai keputusan data-retention cleanup.
+- LLM Insights: generation manual, persisted insight, role-based wording, structured output validation, cooldown/cache, dan advisory-only guardrails.
 - Swagger/OpenAPI setup.
 
 Desktop app:
@@ -31,7 +31,7 @@ Desktop app:
 - Access dan refresh token disimpan terenkripsi melalui Electron `safeStorage`;
   browser fallback hanya menyimpan token di memory.
 - Role-based sidebar.
-- Routes: login, workspace, POS, shift, inventory, receipts, sync status, audit, Shopee, AI.
+- Routes: login, workspace, POS, shift, inventory, receipts, sync status, audit, dan LLM Insights.
 - Local checkout repository dan SQLite schema.
 - POS checkout lokal dengan validasi ulang total, shift, dan stok di Electron
   main process.
@@ -59,14 +59,14 @@ Infrastructure:
 - UI belum final/pixel-perfect dari Figma/Stitch.
 - Production packaging Next.js + Electron belum tervalidasi penuh; wrapper readiness perlu mengikuti `14-desktop-wrapper-readiness.md`.
 - Receipt print nyata belum ada.
+- Shopee sudah dihapus dari active backend/frontend/smoke/env surface; legacy schema marketplace masih dipertahankan inert.
+- LLM provider integration sudah ada, tetapi masih perlu live Gemini validation dengan `LLM_API_KEY` production/UAT.
 - Conflict resolver masih dasar dan belum punya UI.
 - Central sync jobs/logs/branch-health UI masih perlu diperdalam untuk
   supervisor/HQ.
-- Test otomatis untuk role access, Shopee duplicate, dan AI insufficient data
-  masih perlu ditambah; guardrail bundle transaksi utama sudah diuji.
+- Test otomatis untuk LLM missing-key, malformed output, unsafe output, role-based wording, cooldown cache, dan forbidden role sudah ada; DB-backed integration smoke masih perlu dijalankan.
 - Migration Sprint 5/6 harus dipastikan sudah diterapkan di environment target.
-- Shopee perlu validasi credential/sandbox nyata.
-- Python AI worker masih ringan/dry-run; logic AI utama masih di backend.
+- Python AI worker masih ringan/dry-run; logic LLM utama saat ini berada di backend.
 
 ## Gap Dokumentasi yang Sudah Dirapikan
 
@@ -80,7 +80,9 @@ Infrastructure:
 1. Jalankan validasi clean setup: install, infra up, migrate, seed, local DB init, backend, desktop, smoke.
 2. Validasi runtime login/refresh/logout dan secure token persistence di Electron.
 3. Tambahkan branch-scope guard dan permission test.
-4. Tambahkan integration test untuk sync idempotency, Shopee duplicate webhook, dashboard forbidden role, dan AI insufficient data.
-5. Finalisasi UI dari Figma/Stitch.
-6. Validasi packaged Electron app agar POS SQLite berjalan tanpa `next dev`.
-7. Bekukan scope sampai UAT Sprint 7 selesai.
+4. Jalankan live Gemini validation dengan `LLM_API_KEY`, cooldown/cache aktif, dan dataset seed/representatif.
+5. Tambahkan DB-backed integration test untuk sync idempotency, dashboard forbidden role, LLM provider failure, dan insufficient data.
+6. Evaluasi apakah legacy marketplace schema perlu migration cleanup setelah data-retention diputuskan; jangan membuka kembali marketplace/Shopee tanpa keputusan scope baru.
+7. Finalisasi UI dari Figma/Stitch.
+8. Validasi packaged Electron app agar POS SQLite berjalan tanpa `next dev`.
+9. Bekukan scope sampai UAT selesai.

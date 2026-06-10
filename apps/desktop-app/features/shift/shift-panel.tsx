@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button, Badge } from "@omnia/ui";
 
 import { WorkspacePanel } from "@/components/app-shell";
 import { useAppState } from "@/lib/app-state";
 import {
   getLocalActiveShift,
+  getShiftReconciliationPreview,
   isLocalStoreBridgeAvailable,
   listLocalSyncQueue,
   saveShiftEvent,
+  type LocalShiftReconciliationPreview,
 } from "@/features/local-first/local-checkout-repository";
 
 export function ShiftPanel() {
@@ -24,7 +26,50 @@ export function ShiftPanel() {
   const [closingCashAmount, setClosingCashAmount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const [localStoreReady, setLocalStoreReady] = useState(false);
+  const [reconciliationPreview, setReconciliationPreview] =
+    useState<LocalShiftReconciliationPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const refreshPendingCount = useCallback(async () => {
+    try {
+      const queue = await listLocalSyncQueue();
+      setPendingCount(
+        queue.filter((item) => ["pending", "queued"].includes(item.status))
+          .length,
+      );
+    } catch {
+      setLocalStoreReady(false);
+    }
+  }, []);
+
+  const refreshReconciliationPreview = useCallback(async () => {
+    if (
+      !localStoreReady ||
+      shiftStatus !== "open" ||
+      !activeShiftId ||
+      !Number.isFinite(closingCashAmount) ||
+      closingCashAmount < 0
+    ) {
+      setReconciliationPreview(null);
+      return null;
+    }
+
+    const preview = await getShiftReconciliationPreview({
+      branchId: branch.id,
+      registerId: register.id,
+      shiftId: activeShiftId,
+      closingCashAmount,
+    });
+    setReconciliationPreview(preview);
+    return preview;
+  }, [
+    activeShiftId,
+    branch.id,
+    closingCashAmount,
+    localStoreReady,
+    register.id,
+    shiftStatus,
+  ]);
 
   useEffect(() => {
     const hasBridge = isLocalStoreBridgeAvailable();
@@ -47,21 +92,39 @@ export function ShiftPanel() {
   }, [
     branch.id,
     register.id,
+    refreshPendingCount,
     setActiveShiftId,
     setShiftStatus,
   ]);
 
-  const refreshPendingCount = async () => {
-    try {
-      const queue = await listLocalSyncQueue();
-      setPendingCount(
-        queue.filter((item) => ["pending", "queued"].includes(item.status))
-          .length,
-      );
-    } catch {
-      setLocalStoreReady(false);
+  useEffect(() => {
+    void refreshReconciliationPreview().catch((caught) => {
+      setError(toShiftErrorMessage(caught));
+    });
+  }, [refreshReconciliationPreview]);
+
+  useEffect(() => {
+    if (!localStoreReady || shiftStatus !== "open" || !activeShiftId) {
+      return;
     }
-  };
+
+    const interval = window.setInterval(() => {
+      void Promise.all([
+        refreshPendingCount(),
+        refreshReconciliationPreview(),
+      ]).catch((caught) => {
+        setError(toShiftErrorMessage(caught));
+      });
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [
+    activeShiftId,
+    localStoreReady,
+    refreshPendingCount,
+    refreshReconciliationPreview,
+    shiftStatus,
+  ]);
 
   const handleOpenShift = async () => {
     setError(null);
@@ -80,6 +143,7 @@ export function ShiftPanel() {
       });
       setActiveShiftId(result.shiftId);
       setShiftStatus("open");
+      setReconciliationPreview(null);
       await refreshPendingCount();
     } catch (caught) {
       setError(toShiftErrorMessage(caught));
@@ -98,6 +162,12 @@ export function ShiftPanel() {
     }
 
     try {
+      const finalPreview = await getShiftReconciliationPreview({
+        branchId: branch.id,
+        registerId: register.id,
+        shiftId: activeShiftId,
+        closingCashAmount,
+      });
       await saveShiftEvent({
         branch,
         register,
@@ -105,9 +175,11 @@ export function ShiftPanel() {
         action: "close",
         shiftId: activeShiftId,
         closingCashAmount,
+        reconciliation: finalPreview,
       });
       setActiveShiftId(undefined);
       setShiftStatus("closed");
+      setReconciliationPreview(null);
       await refreshPendingCount();
     } catch (caught) {
       setError(toShiftErrorMessage(caught));
@@ -161,6 +233,69 @@ export function ShiftPanel() {
             </label>
           </div>
 
+          {shiftStatus === "open" ? (
+            <div className="mt-5 rounded-md border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-slate-950">
+                    Reconciliation preview
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Local paid transactions only; pending transactions are
+                    called out before close.
+                  </div>
+                </div>
+                {reconciliationPreview &&
+                reconciliationPreview.variance !== 0 ? (
+                  <Badge tone="warning">Variance</Badge>
+                ) : (
+                  <Badge tone="success">Balanced</Badge>
+                )}
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <ReconciliationRow
+                  label="Total sales"
+                  value={reconciliationPreview?.totalSales}
+                />
+                <ReconciliationRow
+                  label="Cash payments"
+                  value={reconciliationPreview?.cashPayments}
+                />
+                <ReconciliationRow
+                  label="Non-cash payments"
+                  value={reconciliationPreview?.nonCashPayments}
+                />
+                <ReconciliationRow
+                  label="Expected cash"
+                  value={reconciliationPreview?.expectedCash}
+                />
+                <ReconciliationRow
+                  label="Closing cash"
+                  value={reconciliationPreview?.closingCash}
+                />
+                <ReconciliationRow
+                  emphasis={
+                    reconciliationPreview
+                      ? reconciliationPreview.variance !== 0
+                      : false
+                  }
+                  label="Variance"
+                  value={reconciliationPreview?.variance}
+                />
+              </div>
+
+              {reconciliationPreview?.pendingCount ? (
+                <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {reconciliationPreview.pendingCount} pending transaction(s)
+                  totaling {formatCurrency(reconciliationPreview.pendingTotal)}
+                  are not included in expected cash. Review Sync Status during
+                  handoff.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="mt-5 flex flex-wrap gap-2">
             <Button
               disabled={shiftStatus === "open" || !localStoreReady}
@@ -211,8 +346,8 @@ export function ShiftPanel() {
           </div>
           {pendingCount > 0 ? (
             <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Some transactions are still pending sync. You can close the shift,
-              but review sync status before handoff.
+              Some events are still pending sync. You can close the shift, but
+              review Sync Status before handoff.
             </div>
           ) : null}
           {shiftStatus === "open" && !activeShiftId ? (
@@ -225,6 +360,41 @@ export function ShiftPanel() {
       </div>
     </WorkspacePanel>
   );
+}
+
+function ReconciliationRow({
+  emphasis = false,
+  label,
+  value,
+}: {
+  emphasis?: boolean;
+  label: string;
+  value?: number;
+}) {
+  return (
+    <div
+      className={`rounded-md border px-3 py-2 ${
+        emphasis
+          ? "border-amber-200 bg-amber-50 text-amber-900"
+          : "border-slate-200 bg-slate-50 text-slate-900"
+      }`}
+    >
+      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className="mt-1 text-sm font-semibold">
+        {value === undefined ? "..." : formatCurrency(value)}
+      </div>
+    </div>
+  );
+}
+
+const currencyFormatter = new Intl.NumberFormat("id-ID", {
+  currency: "IDR",
+  maximumFractionDigits: 0,
+  style: "currency",
+});
+
+function formatCurrency(value: number) {
+  return currencyFormatter.format(value);
 }
 
 function toShiftErrorMessage(caught: unknown) {

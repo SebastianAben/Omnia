@@ -23,8 +23,11 @@ Dokumen ini merangkum flow operasional utama MVP. Detail UI mengikuti `09-ui-des
 
 1. Cashier membuka shift dengan register dan opening cash.
 2. Transaksi berjalan dalam konteks shift.
-3. Cashier menutup shift dengan closing cash.
-4. Event `shift.opened` dan `shift.closed` masuk sync queue.
+3. Sebelum close, app menampilkan preview rekonsiliasi dari SQLite lokal:
+   total sales, cash, non-cash, expected cash, closing cash, dan variance.
+4. Cashier menutup shift dengan closing cash setelah variance terlihat.
+5. Event `shift.opened` dan `shift.closed` masuk sync queue; close event
+   membawa metadata rekonsiliasi.
 
 ## Supervisor: Inventory Adjustment
 
@@ -48,20 +51,22 @@ Dokumen ini merangkum flow operasional utama MVP. Detail UI mengikuti `09-ui-des
 3. Dashboard membaca central DB, bukan local store cabang.
 4. Cashier tidak boleh melihat dashboard pusat.
 
-## Shopee Integration
+## Removed Marketplace Integration
 
-1. HQ Admin menghubungkan store Shopee.
-2. HQ Admin membuat SKU mapping ke produk internal.
-3. Webhook/order import diterima backend.
-4. Backend menyimpan webhook event, integration job/log, order, dan item.
-5. Duplicate webhook tidak boleh membuat order ganda.
-6. Job gagal dapat diretry.
+Shopee dan marketplace integration tidak lagi menjadi flow aktif MVP. Menu,
+endpoint, smoke check, dan copy produk terkait Shopee sudah dihapus dari active
+surface; legacy schema marketplace tetap inert sampai data-retention cleanup
+diputuskan.
 
-## AI Insights
+## LLM Insights
 
-1. HQ Admin atau Executive membuka AI Insights.
-2. Sistem menampilkan low stock, stockout prediction, severity, confidence, dan reference data.
-3. AI tidak mengubah stok, harga, atau order.
+1. HQ Admin atau Executive membuka LLM Insights.
+2. User menjalankan atau membaca hasil generation terbaru.
+3. Backend mengambil konteks central DB yang bounded: sales, inventory, sync, audit, dan branch context.
+4. Backend memanggil LLM provider memakai API key server-side.
+5. Backend memvalidasi structured output sebelum menyimpan insight.
+6. Sistem menampilkan severity, confidence, rekomendasi, reference data, provider/model metadata, dan status generation.
+7. LLM tidak mengubah stok, harga, order, payment, sync, atau master data.
 
 ## Sync Recovery
 
@@ -69,4 +74,3 @@ Dokumen ini merangkum flow operasional utama MVP. Detail UI mengikuti `09-ui-des
 2. Backend memvalidasi event/bundle.
 3. Event yang sudah pernah diproses dikembalikan sebagai duplicate/idempotent success.
 4. Error ditulis ke sync log untuk monitoring.
-

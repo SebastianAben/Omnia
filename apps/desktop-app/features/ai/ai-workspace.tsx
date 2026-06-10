@@ -7,17 +7,23 @@ import {
   BrainCircuit,
   PackageSearch,
   RefreshCcw,
+  Sparkles,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
 
 import { WorkspacePanel } from "@/components/app-shell";
 import {
+  useAiGenerationJobs,
   useAiInsights,
+  useGenerateAiInsights,
   useLowStockInsights,
   useStockoutInsights,
+  type AiGenerationJob,
+  type AiGenerationResult,
   type AiInsight,
 } from "@/features/ai/ai-service";
+import { getAiGenerationUiState } from "@/features/ai/ai-generation-status";
 import { formatRupiah } from "@/features/pos/pos-utils";
 import { roleLabels, useAppState } from "@/lib/app-state";
 
@@ -44,18 +50,30 @@ export function AiWorkspace() {
     [branchFilter, insightType],
   );
   const insights = useAiInsights(filters, token);
+  const generationJobs = useAiGenerationJobs(token);
+  const generateInsights = useGenerateAiInsights(token);
   const lowStock = useLowStockInsights(branchFilter || undefined, token);
   const stockout = useStockoutInsights(branchFilter || undefined, token);
   const canReadAi = role === "hq_admin" || role === "executive";
+  const latestJob = generationJobs.data?.[0];
+  const latestInsightGeneratedAt = useMemo(
+    () =>
+      insights.data
+        ?.map((insight) => insight.generated_at)
+        .filter(Boolean)
+        .sort()
+        .at(-1),
+    [insights.data],
+  );
 
   if (!token) {
     return (
       <WorkspacePanel
         badge="Login dibutuhkan"
         description="Data dibaca dari pusat dan membutuhkan sesi HQ atau analyst."
-        title="AI Review"
+        title="LLM Insights"
       >
-        <StatePanel label="Login dulu untuk membaca ringkasan data pusat." />
+        <StatePanel label="Login dulu untuk membaca LLM insight data pusat." />
       </WorkspacePanel>
     );
   }
@@ -65,7 +83,7 @@ export function AiWorkspace() {
       <WorkspacePanel
         badge={roleLabels[role]}
         description="Akses halaman ini dibatasi untuk HQ Admin dan Executive / Analyst."
-        title="AI Review"
+        title="LLM Insights"
       >
         <StatePanel
           label="Role aktif tidak punya akses halaman ini."
@@ -78,8 +96,8 @@ export function AiWorkspace() {
   return (
     <WorkspacePanel
       badge={roleLabels[role]}
-      description="Ringkasan dari data penjualan dan inventori pusat. Halaman ini tidak mengubah stok, harga, atau order."
-      title="AI Review"
+      description="Insight LLM dari data penjualan dan inventori pusat. Halaman ini tidak mengubah stok, harga, order, payment, sync, atau master data."
+      title="LLM Insights"
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
@@ -112,9 +130,25 @@ export function AiWorkspace() {
           <RefreshCcw size={15} />
           Refresh
         </Button>
+        <Button
+          className="h-9"
+          disabled={generateInsights.isPending}
+          onClick={() => generateInsights.mutate()}
+          type="button"
+        >
+          <Sparkles size={15} />
+          {generateInsights.isPending ? "Generating" : "Generate"}
+        </Button>
       </div>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-3">
+      <GenerationStatus
+        job={latestJob}
+        latestInsightGeneratedAt={latestInsightGeneratedAt}
+        result={generateInsights.data}
+        transportError={generateInsights.isError}
+      />
+
+      <div className="mb-4 mt-4 grid gap-3 md:grid-cols-3">
         <Metric
           icon={BrainCircuit}
           label="Total catatan"
@@ -238,6 +272,56 @@ function InsightReference({ insights }: { insights: AiInsight[] }) {
   );
 }
 
+function GenerationStatus({
+  job,
+  latestInsightGeneratedAt,
+  result,
+  transportError,
+}: {
+  job?: AiGenerationJob;
+  latestInsightGeneratedAt?: string;
+  result?: AiGenerationResult;
+  transportError: boolean;
+}) {
+  if (transportError) {
+    return (
+      <StatePanel
+        label="LLM generation endpoint tidak tersedia atau akses ditolak."
+        tone="danger"
+      />
+    );
+  }
+
+  const state = getAiGenerationUiState({
+    status: result?.status ?? job?.status,
+    insightCount: result?.insight_count ?? job?.insight_count ?? 0,
+    errorCode: result?.error_code ?? job?.error_code,
+    errorMessage: result?.error_message ?? job?.error_message,
+    finishedAt: job?.finished_at,
+  });
+  const details = [
+    state.detail,
+    state.finishedAt
+      ? `Finished ${new Date(state.finishedAt).toLocaleString("id-ID")}.`
+      : null,
+    latestInsightGeneratedAt
+      ? `Latest insight ${new Date(latestInsightGeneratedAt).toLocaleString("id-ID")}.`
+      : null,
+    result?.provider || result?.model
+      ? `Provider ${result.provider} / ${result.model}.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <StatePanel
+      label={`${state.label}. ${details}`}
+      tone={state.tone === "danger" ? "danger" : state.tone}
+    />
+  );
+}
+
 function InsightIcon({ insight }: { insight: AiInsight }) {
   if (insight.insight_type === "sales_trend") {
     const delta = Number(insight.reference_data.delta_percent ?? 0);
@@ -304,15 +388,19 @@ function StatePanel({
   tone = "neutral",
 }: {
   label: string;
-  tone?: "neutral" | "danger";
+  tone?: "neutral" | "danger" | "success" | "warning";
 }) {
   return (
     <div
       className={cn(
         "rounded-md border p-4 text-sm",
-        tone === "danger"
-          ? "border-rose-200 bg-rose-50 text-rose-700"
-          : "border-slate-200 bg-slate-50 text-slate-600",
+        tone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : tone === "warning"
+            ? "border-amber-200 bg-amber-50 text-amber-800"
+          : tone === "danger"
+            ? "border-rose-200 bg-rose-50 text-rose-700"
+            : "border-slate-200 bg-slate-50 text-slate-600",
       )}
     >
       {label}

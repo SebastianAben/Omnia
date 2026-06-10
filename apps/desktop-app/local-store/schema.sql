@@ -107,6 +107,13 @@ CREATE TABLE IF NOT EXISTS shifts_local (
   closed_at TEXT,
   opening_cash_amount INTEGER DEFAULT 0,
   closing_cash_amount INTEGER,
+  reconciliation_total_sales INTEGER,
+  reconciliation_cash_payments INTEGER,
+  reconciliation_non_cash_payments INTEGER,
+  reconciliation_expected_cash INTEGER,
+  reconciliation_variance INTEGER,
+  reconciliation_pending_count INTEGER,
+  reconciliation_pending_total INTEGER,
   status TEXT NOT NULL DEFAULT 'open',
   sync_status TEXT NOT NULL DEFAULT 'pending'
 );

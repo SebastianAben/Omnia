@@ -2,32 +2,32 @@
 
 ## Stack Final
 
-| Layer | Stack |
-| --- | --- |
-| Monorepo | pnpm workspace |
-| Frontend | Next.js, React, TypeScript |
-| Desktop | Electron |
-| Styling/UI | Tailwind CSS, internal UI package, lucide-react |
-| State | Zustand, TanStack Query |
-| Local DB | SQLite |
-| Backend | NestJS, TypeScript |
-| Central DB | PostgreSQL |
-| ORM | Prisma |
-| Queue | Redis, BullMQ |
-| Validation | Zod, class-validator/class-transformer |
-| API Docs | Swagger/OpenAPI |
-| AI Worker | Python skeleton, backend AI orchestration |
-| CI/CD | GitHub Actions, Docker |
+| Layer      | Stack                                               |
+| ---------- | --------------------------------------------------- |
+| Monorepo   | pnpm workspace                                      |
+| Frontend   | Next.js, React, TypeScript                          |
+| Desktop    | Electron                                            |
+| Styling/UI | Tailwind CSS, internal UI package, lucide-react     |
+| State      | Zustand, TanStack Query                             |
+| Local DB   | SQLite                                              |
+| Backend    | NestJS, TypeScript                                  |
+| Central DB | PostgreSQL                                          |
+| ORM        | Prisma                                              |
+| Queue      | Redis, BullMQ                                       |
+| Validation | Zod, class-validator/class-transformer              |
+| API Docs   | Swagger/OpenAPI                                     |
+| LLM Worker | Backend/worker orchestration for LLM provider calls |
+| CI/CD      | GitHub Actions, Docker                              |
 
 ## Alasan Pemilihan
 
 - TypeScript end-to-end mempercepat sharing types dan contract.
 - Electron memberi akses desktop/local yang lebih cocok untuk POS cabang.
 - SQLite kuat untuk local-first transaction store.
-- NestJS modular cocok untuk domain besar seperti POS, inventory, sync, Shopee, AI.
+- NestJS modular cocok untuk domain besar seperti POS, inventory, sync, dashboard, audit, dan LLM insight.
 - PostgreSQL matang untuk relasi, audit, dan reporting.
 - Prisma mempercepat schema dan query typed.
-- Redis/BullMQ cukup sederhana untuk retry, webhook, sync, dan job async.
+- Redis/BullMQ cukup sederhana untuk retry, sync, LLM generation, dan job async.
 
 ## Struktur Repo
 
@@ -70,7 +70,15 @@ pnpm smoke:mvp
 - `CORS_ORIGINS`
 - `NEXT_PUBLIC_API_BASE_URL`
 - `NEXT_PUBLIC_SYNC_STATUS_POLL_INTERVAL_MS`
-- `AI_WORKER_BACKEND_TOKEN`
+- `LLM_PROVIDER`
+- `LLM_API_KEY`
+- `LLM_MODEL`
+- `LLM_TIMEOUT_MS`
+- `LLM_INSIGHT_TTL_MINUTES`
+- `LLM_MAX_INSIGHTS`
+- `LLM_MAX_CONTEXT_ROWS`
+- `LLM_GENERATION_COOLDOWN_MINUTES`
+- `AI_WORKER_BACKEND_TOKEN` jika worker tetap dipakai sebagai orchestrator internal
 
 ## Risiko Teknis
 

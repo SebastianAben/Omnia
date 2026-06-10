@@ -11,25 +11,44 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16),
   JWT_EXPIRES_IN: z.string().regex(/^\d+[smhd]?$/),
   REFRESH_TOKEN_SECRET: z.string().min(16),
-  REFRESH_TOKEN_EXPIRES_IN: z.string().regex(/^\d+[smhd]?$/).default("30d"),
-  SHOPEE_CLIENT_ID: z.string().optional(),
-  SHOPEE_CLIENT_SECRET: z.string().optional(),
-  SHOPEE_REDIRECT_URI: z.string().url().optional().or(z.literal("")),
-  SHOPEE_WEBHOOK_SECRET: z
+  REFRESH_TOKEN_EXPIRES_IN: z
     .string()
+    .regex(/^\d+[smhd]?$/)
+    .default("30d"),
+  LLM_PROVIDER: z.enum(["gemini"]).default("gemini"),
+  LLM_API_KEY: z.string().optional().or(z.literal("")),
+  LLM_MODEL: z.string().min(1).default("gemini-2.5-flash"),
+  LLM_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .default(20000)
+    .transform(String),
+  LLM_INSIGHT_TTL_MINUTES: z.coerce
+    .number()
+    .int()
     .min(1)
-    .default("local-shopee-webhook-secret"),
-  SHOPEE_MOCK_MODE: z
-    .enum(["true", "false"])
-    .default("true")
-    .refine((value) => value === "true", {
-      message: "must be true for mock-first Shopee integration",
-    }),
-  SHOPEE_WEBHOOK_MAX_SKEW_SECONDS: z.coerce
+    .default(15)
+    .transform(String),
+  LLM_MAX_INSIGHTS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(8)
+    .default(8)
+    .transform(String),
+  LLM_MAX_CONTEXT_ROWS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(30)
+    .transform(String),
+  LLM_GENERATION_COOLDOWN_MINUTES: z.coerce
     .number()
     .int()
     .min(0)
-    .default(300)
+    .default(60)
     .transform(String),
   SENTRY_DSN: z.string().url().optional().or(z.literal("")),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]),

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Badge, Button } from "@omnia/ui";
-import { Minus, Plus, RefreshCcw } from "lucide-react";
+import { AlertTriangle, Minus, Plus, RefreshCcw } from "lucide-react";
 
 import { WorkspacePanel } from "@/components/app-shell";
 import {
@@ -18,6 +18,12 @@ import {
   loadPosCatalog,
 } from "@/features/pos/product-service";
 import type { PosProduct } from "@/features/pos/pos-types";
+import {
+  buildStockNotifications,
+  getStockNotificationType,
+  summarizeStockNotifications,
+  type StockNotification,
+} from "@/features/inventory/stock-notifications";
 import { useAppState } from "@/lib/app-state";
 
 type InventoryProduct = PosProduct & {
@@ -74,9 +80,26 @@ export function InventoryPanel() {
   const selectedProduct =
     productsWithBalances.find((product) => product.id === selectedProductId) ??
     productsWithBalances[0];
-  const lowStockCount = productsWithBalances.filter(
-    (product) => product.stockOnHand <= product.minimumQuantity,
-  ).length;
+  const stockNotifications = useMemo(
+    () =>
+      buildStockNotifications(
+        productsWithBalances.map((product) => ({
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          branchName: branch.name,
+          quantityOnHand: product.stockOnHand,
+          threshold: product.minimumQuantity,
+          source: "local",
+          updatedAt: product.localUpdatedAt,
+        })),
+      ),
+    [branch.name, productsWithBalances],
+  );
+  const notificationSummary = useMemo(
+    () => summarizeStockNotifications(stockNotifications),
+    [stockNotifications],
+  );
   const adjustmentWouldUnderflow =
     movementType === "adjustment_minus" &&
     selectedProduct &&
@@ -158,7 +181,10 @@ export function InventoryPanel() {
               label="Products"
               value={String(productsWithBalances.length)}
             />
-            <Metric label="Low stock" value={String(lowStockCount)} />
+            <Metric
+              label="Stock alerts"
+              value={String(notificationSummary.total)}
+            />
             <Metric
               label="Pending movements"
               value={String(
@@ -168,6 +194,12 @@ export function InventoryPanel() {
               )}
             />
           </div>
+
+          <StockAlertSummary
+            lowStock={notificationSummary.lowStock}
+            notifications={stockNotifications}
+            outOfStock={notificationSummary.outOfStock}
+          />
 
           <div className="overflow-hidden rounded-md border border-slate-200">
             <table className="w-full text-left text-sm">
@@ -181,8 +213,10 @@ export function InventoryPanel() {
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {productsWithBalances.map((product) => {
-                  const isLowStock =
-                    product.stockOnHand <= product.minimumQuantity;
+                  const stockStatus = getStockNotificationType({
+                    stockOnHand: product.stockOnHand,
+                    minimumQuantity: product.minimumQuantity,
+                  });
 
                   return (
                     <tr
@@ -205,8 +239,20 @@ export function InventoryPanel() {
                         {product.minimumQuantity} {product.unit}
                       </td>
                       <td className="px-3 py-2">
-                        <Badge tone={isLowStock ? "warning" : "success"}>
-                          {isLowStock ? "Low" : "Ready"}
+                        <Badge
+                          tone={
+                            stockStatus === "out_of_stock"
+                              ? "danger"
+                              : stockStatus === "low_stock"
+                                ? "warning"
+                                : "success"
+                          }
+                        >
+                          {stockStatus === "out_of_stock"
+                            ? "Out"
+                            : stockStatus === "low_stock"
+                              ? "Low"
+                              : "Ready"}
                         </Badge>
                       </td>
                     </tr>
@@ -391,6 +437,73 @@ export function InventoryPanel() {
         </aside>
       </div>
     </WorkspacePanel>
+  );
+}
+
+function StockAlertSummary({
+  lowStock,
+  notifications,
+  outOfStock,
+}: {
+  lowStock: number;
+  notifications: StockNotification[];
+  outOfStock: number;
+}) {
+  if (notifications.length === 0) {
+    return (
+      <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+        Semua produk lokal berada di atas ambang minimum. Continue monitoring
+        stock movements after each adjustment.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <AlertTriangle
+            aria-hidden="true"
+            className="mt-0.5 shrink-0 text-amber-700"
+            size={18}
+          />
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-amber-950">
+              Smart stock notifications
+            </div>
+            <div className="mt-1 text-sm text-amber-800">
+              {outOfStock} out of stock, {lowStock} low stock.
+              {" "}Adjust stock or prepare replenishment before checkout demand
+              increases.
+            </div>
+          </div>
+        </div>
+        <Badge tone={outOfStock > 0 ? "danger" : "warning"}>
+          {notifications.length} alerts
+        </Badge>
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        {notifications.slice(0, 5).map((notification) => (
+          <div
+            className="grid gap-2 rounded-md border border-white/70 bg-white/80 px-3 py-2 text-sm md:grid-cols-[minmax(0,1fr)_auto]"
+            key={`${notification.source}-${notification.productId}`}
+          >
+            <div className="min-w-0">
+              <div className="truncate font-medium text-slate-950">
+                {notification.name}
+              </div>
+              <div className="mt-0.5 text-xs text-slate-600">
+                {notification.sku} / {notification.branchName}
+              </div>
+            </div>
+            <div className="text-left font-mono text-xs text-slate-700 md:text-right">
+              {notification.quantityOnHand} / min {notification.threshold}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -1,14 +1,14 @@
 # Omnia
 
-Omnia adalah Hybrid Omnichannel Smart POS untuk retail dan UMKM multi-cabang. MVP berfokus pada POS local-first, inventory, sync ke pusat, dashboard dasar, Shopee integration, dan AI insights sederhana.
+Omnia adalah Hybrid Smart POS untuk retail dan UMKM multi-cabang. MVP berfokus pada POS local-first, inventory, sync ke pusat, dashboard dasar, audit/monitoring, dan LLM-powered insights.
 
 Dokumentasi utama tersedia di [docs/01-index.md](docs/01-index.md). Standar modularitas, clean code, dan performa ada di [docs/13-engineering-knowledge.md](docs/13-engineering-knowledge.md). Kesiapan Next.js untuk dibungkus sebagai desktop app dengan SQLite lokal dijelaskan di [docs/14-desktop-wrapper-readiness.md](docs/14-desktop-wrapper-readiness.md).
 
 ## Implementation Status
 
-Sprint 0 foundation sudah selesai dan repo sudah masuk fitur MVP awal. Fondasi monorepo, desktop app shell, backend API, database, auth demo, sync foundation, seed data, CI/CD, deployment/env contract, dashboard dasar, dan Shopee mock-first integration sudah tersedia.
+Sprint 0 foundation sudah selesai dan repo sudah masuk fitur MVP awal. Fondasi monorepo, desktop app shell, backend API, database, auth demo, sync foundation, seed data, CI/CD, deployment/env contract, dan dashboard dasar sudah tersedia.
 
-Fitur yang sudah mulai berjalan meliputi POS checkout local-first ke SQLite, shift dasar, inventory adjustment MVP, receipt preview, sync status/replay transaksi, shift, dan stock movement, backend apply `transaction.bundle`, `shift.opened`/`shift.closed`, `stock_movement.created`, dashboard/reporting/audit, serta Shopee store/mapping/webhook/order import mock-first. Fitur yang masih belum final: UI Figma/pixel-perfect, auth production-grade, real Shopee OAuth/sandbox, outbound stock sync nyata, dan AI insights.
+Fitur yang sudah mulai berjalan meliputi POS checkout local-first ke SQLite, shift dasar, inventory adjustment MVP, receipt preview, sync status/replay transaksi, shift, dan stock movement, backend apply `transaction.bundle`, `shift.opened`/`shift.closed`, `stock_movement.created`, dashboard/reporting/audit, serta LLM Insights berbasis Gemini dengan structured output. Scope terbaru menghapus Shopee dari target aktif. Fitur yang masih belum final: UI Figma/pixel-perfect, auth production-grade, live provider validation, smoke runtime penuh, dan UAT.
 
 ## Struktur Repo
 
@@ -16,7 +16,7 @@ Fitur yang sudah mulai berjalan meliputi POS checkout local-first ke SQLite, shi
 apps/
   desktop-app/   Next.js + Electron shell
   backend-api/   NestJS central API
-  ai-worker/     Python AI/analytics worker
+  ai-worker/     LLM/analytics worker skeleton
 packages/
   ui/            shared UI primitives
   types/         shared TypeScript contracts
@@ -98,7 +98,7 @@ Setelah setup lokal, migration, seed, dan backend berjalan, validasi smoke Sprin
 pnpm smoke:mvp
 ```
 
-Smoke check ini memvalidasi health, login role utama, master data, sync bundle + idempotency, central dashboard, Shopee integration health, dan AI insights. Detail release readiness dan backlog ekspansi ada di [Implementation Roadmap](docs/10-implementation-roadmap.md).
+Smoke check ini memvalidasi health, login role utama, master data, sync bundle + idempotency, central dashboard, dan LLM insights sesuai scope terbaru. Detail release readiness dan backlog ekspansi ada di [Implementation Roadmap](docs/10-implementation-roadmap.md).
 
 ## CI/CD Home Server
 
@@ -198,11 +198,16 @@ Key values:
 - `DATABASE_URL` for PostgreSQL
 - `REDIS_URL` for Redis/BullMQ
 - `PUBLIC_API_URL` for backend public URL
-- `SHOPEE_WEBHOOK_SECRET` for mock Shopee webhook validation
-- `SHOPEE_MOCK_MODE=true` for Sprint 5 mock-first behavior
-- `SHOPEE_WEBHOOK_MAX_SKEW_SECONDS` for optional webhook timestamp skew validation
+- `LLM_PROVIDER` for LLM provider selection
+- `LLM_API_KEY` for server-side LLM provider access
+- `LLM_MODEL` for the insight generation model
+- `LLM_TIMEOUT_MS` for provider timeout
+- `LLM_INSIGHT_TTL_MINUTES` for insight cache/staleness behavior
+- `LLM_MAX_INSIGHTS` for maximum generated insight count per provider call
+- `LLM_MAX_CONTEXT_ROWS` for bounded central-data context size
+- `LLM_GENERATION_COOLDOWN_MINUTES` for reusing fresh persisted insights
 
-Sprint 5 Shopee webhook smoke payload can be posted to `POST /api/v1/webhooks/shopee/orders` with header `x-shopee-webhook-secret: <SHOPEE_WEBHOOK_SECRET>`. Real Shopee OAuth/signature and outbound stock sync are intentionally outside the current mock-first scope.
+Shopee/mock marketplace integration is no longer active MVP scope. Active Shopee backend endpoints, frontend routes, env values, and smoke checks have been removed from the MVP runtime surface; legacy marketplace schema remains inert until a separate data-retention cleanup is approved.
 
 See [Technical Stack](docs/08-technical-stack.md) and [System Architecture](docs/04-system-architecture.md).
 

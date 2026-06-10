@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Badge } from "@omnia/ui";
+import { Badge, Button } from "@omnia/ui";
 
 import { WorkspacePanel } from "@/components/app-shell";
+import { InlineFeedback, UiStatePanel } from "@/components/ui-state";
 import {
   listLocalSyncQueue,
   replayPendingSync,
   type LocalSyncQueueRecord,
 } from "@/features/local-first/local-checkout-repository";
+import { getSyncStatusAction } from "@/features/uat/operational-copy";
 import { useAppState } from "@/lib/app-state";
 import { getLocalSyncSummary, type SyncQueueSummary } from "./sync-summary";
 
@@ -74,38 +76,51 @@ export function SyncStatusPanel() {
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-slate-600">
-          Replay pending and failed local events to the central backend.
+          Replay pending and failed local events when the central backend is
+          reachable.
         </div>
-        <button
-          className="h-9 rounded-md bg-slate-950 px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+        <Button
+          className="h-9"
           disabled={isReplaying}
           onClick={handleReplay}
           type="button"
         >
           {isReplaying ? "Replaying..." : "Replay Sync"}
-        </button>
+        </Button>
       </div>
       {replayMessage ? (
-        <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+        <InlineFeedback className="mb-4">
           {replayMessage}
-        </div>
+        </InlineFeedback>
       ) : null}
 
       <div className="grid gap-3">
-        {summary.map((item) => (
-          <div
-            className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-3"
-            key={item.label}
-          >
-            <div>
-              <div className="text-sm font-medium text-slate-950">
-                {item.label}
+        {summary.map((item) => {
+          const action = getSyncStatusAction(
+            item.failed > 0
+              ? "failed"
+              : item.pending > 0
+                ? "pending"
+                : "synced",
+          );
+
+          return (
+            <div
+              className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-3"
+              key={item.label}
+            >
+              <div>
+                <div className="text-sm font-medium text-slate-950">
+                  {item.label}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {item.description}. {action.nextAction}
+                </div>
               </div>
-              <div className="text-xs text-slate-500">{item.description}</div>
+              <Badge tone={item.status}>{formatStatus(item)}</Badge>
             </div>
-            <Badge tone={item.status}>{formatStatus(item)}</Badge>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-5 overflow-hidden rounded-md border border-slate-200">
@@ -128,12 +143,16 @@ export function SyncStatusPanel() {
                   className="px-3 py-6 text-center text-slate-500"
                   colSpan={7}
                 >
-                  No queued local event
+                  No queued local event. New checkout, shift, and inventory
+                  events will appear here before replay.
                 </td>
               </tr>
             ) : (
-              queue.map((item) => (
-                <tr key={item.id}>
+              queue.map((item) => {
+                const action = getSyncStatusAction(item.status);
+
+                return (
+                  <tr key={item.id}>
                   <td className="px-3 py-2 font-medium text-slate-950">
                     {item.eventType}
                   </td>
@@ -150,27 +169,26 @@ export function SyncStatusPanel() {
                       : "-"}
                   </td>
                   <td className="px-3 py-2">
-                    <Badge
-                      tone={
-                        item.status === "failed" || item.status === "conflict"
-                          ? "danger"
-                          : item.status === "synced"
-                            ? "success"
-                            : "warning"
-                      }
-                    >
-                      {item.status}
-                    </Badge>
+                    <Badge tone={action.tone}>{action.label}</Badge>
                   </td>
                   <td className="max-w-xs truncate px-3 py-2 text-xs text-slate-500">
-                    {item.lastErrorMessage ?? item.lastErrorCode ?? "-"}
+                    {item.lastErrorMessage ??
+                      item.lastErrorCode ??
+                      action.nextAction}
                   </td>
-                </tr>
-              ))
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
+      {queue.some((item) => item.status === "failed" || item.status === "conflict") ? (
+        <UiStatePanel className="mt-4" tone="warning">
+          Failed or conflict events need review before UAT handoff. Keep checkout
+          available, then replay once the cause is resolved.
+        </UiStatePanel>
+      ) : null}
     </WorkspacePanel>
   );
 }

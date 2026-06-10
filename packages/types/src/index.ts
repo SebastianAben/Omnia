@@ -55,7 +55,7 @@ export interface SyncEventEnvelope<TPayload = unknown> {
   eventType: SyncEventType;
   eventVersion: number;
   branchId: string;
-  sourceSystem: "branch_app" | "central_service" | "shopee_integration";
+  sourceSystem: "branch_app" | "central_service";
   sourceMode: "online" | "offline_replay";
   entityType: string;
   entityId: string;

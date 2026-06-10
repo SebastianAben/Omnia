@@ -6,7 +6,7 @@ Dokumen ini adalah acuan modularitas, efisiensi, performa, dan clean code untuk 
 
 - Utamakan behavior yang benar dan mudah diuji sebelum optimasi kompleks.
 - Buat modul berdasarkan domain bisnis, bukan jenis file semata.
-- Jaga boundary POS local-first: checkout tidak boleh bergantung pada dashboard, Shopee, AI, atau koneksi pusat.
+- Jaga boundary POS local-first: checkout tidak boleh bergantung pada dashboard, LLM insight, atau koneksi pusat.
 - Hindari duplikasi logic bisnis; pindahkan logic berulang ke service/domain helper yang jelas.
 - Buat code path kritis pendek, eksplisit, dan mudah diobservasi.
 - Optimasi harus punya alasan: data volume, latency, memory, query cost, atau UX blocking.
@@ -38,7 +38,7 @@ Gunakan modul per domain:
 - `reports`
 - `audit`
 - `monitoring`
-- `integrations/shopee`
+- `ai` / `llm-insights`
 - `ai`
 
 Aturan:
@@ -148,7 +148,7 @@ Aturan:
 - Gunakan memoization hanya saat ada render cost nyata.
 - Hindari refetch agresif; gunakan `staleTime` untuk dashboard/report.
 - Loading, empty, dan error state harus ringan.
-- Jangan memblokir checkout karena fetch dashboard/Shopee/AI gagal.
+- Jangan memblokir checkout karena fetch dashboard/LLM insight gagal.
 - Jangan membuat fitur POS yang hanya valid di browser; target cabang adalah desktop wrapper.
 
 Jika UI lambat:
@@ -194,14 +194,14 @@ Refactor saat salah satu terjadi:
 
 ## Alternative Approaches
 
-| Masalah | Pendekatan awal | Jika tidak cukup |
-| --- | --- | --- |
-| Dashboard lambat | Prisma aggregate/query langsung | Aggregation table/materialized view/cache |
-| Sync request berat | Apply langsung di service | Queue worker async + acknowledgement |
-| UI POS lambat | Component split dan local state | Virtualized list/search index lokal |
-| Prisma query kompleks | `select/include` terukur | Raw SQL helper |
-| Permission tersebar | Guard per endpoint | Policy service terpusat |
-| AI worker ringan | Backend-generated insight | Dedicated Python service/job queue |
+| Masalah                      | Pendekatan awal                   | Jika tidak cukup                             |
+| ---------------------------- | --------------------------------- | -------------------------------------------- |
+| Dashboard lambat             | Prisma aggregate/query langsung   | Aggregation table/materialized view/cache    |
+| Sync request berat           | Apply langsung di service         | Queue worker async + acknowledgement         |
+| UI POS lambat                | Component split dan local state   | Virtualized list/search index lokal          |
+| Prisma query kompleks        | `select/include` terukur          | Raw SQL helper                               |
+| Permission tersebar          | Guard per endpoint                | Policy service terpusat                      |
+| Rule-based AI insight        | LLM-backed structured generation  | Provider adapter + queue/cache + validation  |
 | Desktop packaging bermasalah | Electron + Next standalone server | Static export renderer jika route kompatibel |
 
 ## Review Checklist

@@ -75,6 +75,18 @@ type OmniaLocalStockMovementRecord = {
   syncStatus: "pending" | "queued" | "synced" | "failed" | "conflict";
 };
 
+type OmniaShiftReconciliationPreview = {
+  totalSales: number;
+  cashPayments: number;
+  nonCashPayments: number;
+  openingCash: number;
+  expectedCash: number;
+  closingCash: number;
+  variance: number;
+  pendingCount: number;
+  pendingTotal: number;
+};
+
 declare global {
   interface Window {
     omniaDesktop?: {
@@ -137,6 +149,12 @@ declare global {
           status: "open";
           syncStatus: "pending" | "queued" | "synced" | "failed" | "conflict";
         } | null>;
+        getShiftReconciliationPreview: (input: {
+          branchId: string;
+          registerId: string;
+          shiftId: string;
+          closingCashAmount: number;
+        }) => Promise<OmniaShiftReconciliationPreview>;
       };
     };
   }

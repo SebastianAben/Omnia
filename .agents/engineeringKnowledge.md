@@ -32,10 +32,20 @@ Do not add abstractions for style only. Add abstraction when it removes duplicat
 - API calls are in feature service.
 - Server state uses TanStack Query.
 - UI/local/cart state uses Zustand or component state.
-- POS path does not depend on dashboard/Shopee/AI.
+- POS path does not depend on dashboard/LLM insights.
+- Shopee is out of active scope; remove or quarantine legacy marketplace code before building new marketplace behavior.
+- LLM integrations require server-side key handling, bounded context, structured output validation, prompt/version metadata, cache/TTL, and non-blocking failure states.
 - Local-first POS features call Electron bridge, not browser-only or direct Node/SQLite access.
 - Large lists are filtered, paginated, or otherwise bounded.
 - Loading/error/empty states exist.
+- Close shift reconciliation must compare expected cash against cashier-entered
+  closing cash and show total sales, cash, non-cash, and variance before close.
+- High-volume POS UX must remain search/scan and keyboard friendly without
+  weakening stock-bounded cart behavior.
+- Stock notifications must be in-app and non-blocking unless a later product
+  decision adds push infrastructure.
+- Dashboard "real time" claims must distinguish query/polling refresh from true
+  streaming updates.
 
 ## API Checklist
 
@@ -73,3 +83,10 @@ When performance is not good enough:
 3. Add index/pagination/cache only where justified.
 4. Document the reason in code comment or session handoff.
 5. Update `docs/13-engineering-knowledge.md` if the pattern becomes reusable.
+
+## Completion Claim Rule
+
+Do not mark a feature complete only because code exists. A feature is complete
+only after the relevant runtime smoke or UAT path has passed, or after the gap is
+explicitly recorded as a next implementation phase in
+`.agents/sessionImplementation.md`.

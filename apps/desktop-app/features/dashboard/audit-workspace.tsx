@@ -4,6 +4,7 @@ import { Badge } from "@omnia/ui";
 import { ShieldCheck } from "lucide-react";
 
 import { WorkspacePanel } from "@/components/app-shell";
+import { UiStatePanel } from "@/components/ui-state";
 import { useAuditLogs } from "@/features/dashboard/dashboard-service";
 import { useAppState } from "@/lib/app-state";
 
@@ -22,21 +23,20 @@ export function AuditWorkspace() {
       title="Audit Logs"
     >
       {!token ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <UiStatePanel tone="warning">
           Login required to inspect audit logs.
-        </div>
+        </UiStatePanel>
       ) : !canReadAudit ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <UiStatePanel tone="warning">
           Audit logs are restricted for the active role.
-        </div>
+        </UiStatePanel>
       ) : audit.isLoading ? (
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-          Loading audit logs...
-        </div>
+        <UiStatePanel>Loading audit logs from the central backend...</UiStatePanel>
       ) : audit.isError ? (
-        <div className="rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          Audit API is unavailable or access is denied.
-        </div>
+        <UiStatePanel tone="danger">
+          Audit API is unavailable or access is denied. Check login, role, and
+          backend availability.
+        </UiStatePanel>
       ) : (
         <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
           <table className="w-full text-left text-sm">

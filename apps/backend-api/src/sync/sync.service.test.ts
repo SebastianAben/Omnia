@@ -109,6 +109,41 @@ const validStockMovementEvent = {
   },
 };
 
+const validShiftClosedEvent = {
+  event_id: "event-shift-closed-1",
+  event_type: "shift.closed" as const,
+  event_version: "1",
+  branch_id: "branch-a",
+  source_system: "branch_app",
+  source_mode: "offline_replay" as const,
+  entity_type: "shift" as const,
+  entity_id: "shift-1",
+  occurred_at: "2026-06-07T08:00:00.000Z",
+  produced_by_user_id: "cashier-1",
+  payload: {
+    shift: {
+      id: "shift-1",
+      branch_id: "branch-a",
+      register_id: "register-1",
+      action: "close" as const,
+      closed_by_user_id: "cashier-1",
+      closed_at: "2026-06-07T08:00:00.000Z",
+      closing_cash_amount: 180000,
+      reconciliation: {
+        total_sales: 200000,
+        cash_payments: 100000,
+        non_cash_payments: 100000,
+        opening_cash: 50000,
+        expected_cash: 150000,
+        closing_cash: 180000,
+        variance: 30000,
+        pending_count: 2,
+        pending_total: 50000,
+      },
+    },
+  },
+};
+
 test("SyncController rejects branch users replaying another branch bundle", () => {
   let called = false;
   const controller = new SyncController({
@@ -459,6 +494,58 @@ test("SyncService rejects invalid sale stock movement direction", async () => {
   );
 
   assert.equal(transactionCalled, false);
+});
+
+test("SyncService accepts shift close reconciliation metadata without persisting central columns", async () => {
+  let shiftUpdated = false;
+  const service = new SyncService(
+    {
+      enqueueSyncEvent: async () => "queue-job-1",
+    } as never,
+    {
+      syncLog: {
+        findFirst: async () => null,
+      },
+      $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
+        callback({
+          branch: { findFirst: async () => ({ id: "branch-a" }) },
+          register: { findFirst: async () => ({ id: "register-1" }) },
+          user: { findFirst: async () => ({ id: "cashier-1" }) },
+          syncJob: {
+            create: async () => ({ id: "sync-job-1" }),
+            update: async () => undefined,
+          },
+          syncLog: {
+            create: async () => undefined,
+          },
+          shift: {
+            findUnique: async () => ({
+              id: "shift-1",
+              branchId: "branch-a",
+              registerId: "register-1",
+              openedAt: new Date("2026-06-07T00:00:00.000Z"),
+              status: "OPEN",
+            }),
+            update: async ({ data }: { data: Record<string, unknown> }) => {
+              assert.equal(data.closedByUserId, "cashier-1");
+              assert.equal(data.closingCashAmount, 180000);
+              assert.equal("reconciliation" in data, false);
+              shiftUpdated = true;
+            },
+          },
+          auditLog: {
+            create: async () => undefined,
+          },
+        }),
+    } as never,
+  );
+
+  const result = await service.receiveEvent(validShiftClosedEvent);
+
+  assert.equal(result.success, true);
+  assert.ok("result_status" in result.data);
+  assert.equal(result.data.result_status, "synced");
+  assert.equal(shiftUpdated, true);
 });
 
 test("SyncService rejects sale movements that do not match item quantities", async () => {

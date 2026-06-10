@@ -130,6 +130,19 @@ const shiftEventSchema = z.object({
       occurred_at: z.string().datetime().optional(),
       opening_cash_amount: moneySchema.optional(),
       closing_cash_amount: moneySchema.nullable().optional(),
+      reconciliation: z
+        .object({
+          total_sales: moneySchema,
+          cash_payments: moneySchema,
+          non_cash_payments: moneySchema,
+          opening_cash: moneySchema,
+          expected_cash: moneySchema,
+          closing_cash: moneySchema,
+          variance: moneySchema,
+          pending_count: z.coerce.number().int().nonnegative(),
+          pending_total: moneySchema,
+        })
+        .optional(),
     }),
   }),
 });

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@omnia/ui";
 
 import { WorkspacePanel } from "@/components/app-shell";
+import { UiStatePanel } from "@/components/ui-state";
 import {
   listLocalTransactions,
   type LocalTransactionRecord,
@@ -29,9 +30,10 @@ export function ReceiptList() {
     >
       <div className="grid gap-3">
         {transactions.length === 0 ? (
-          <div className="rounded-md border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
-            No local receipt yet
-          </div>
+          <UiStatePanel className="border-dashed text-center">
+            No local receipt yet. Complete a checkout on this register to see
+            receipt preview and sync status here.
+          </UiStatePanel>
         ) : (
           transactions.map((transaction) => (
             <article

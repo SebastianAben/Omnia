@@ -126,6 +126,8 @@ export const dashboardKeys = {
   detail: (scope: DashboardScope, filters: DashboardFilters) =>
     [...dashboardKeys.all, scope, filters] as const,
   audit: (branchId?: string) => [...dashboardKeys.all, "audit", branchId] as const,
+  inventoryAlerts: (branchId?: string) =>
+    [...dashboardKeys.all, "inventory-alerts", branchId] as const,
 };
 
 export function useDashboard(
@@ -151,6 +153,23 @@ export function useAuditLogs(
     queryFn: () =>
       apiFetch<AuditLog[]>(
         `/audit/logs${branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ""}`,
+        { token },
+      ),
+    enabled: Boolean(token) && enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useInventoryAlerts(
+  branchId?: string,
+  token?: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: dashboardKeys.inventoryAlerts(branchId),
+    queryFn: () =>
+      apiFetch<InventoryAlert[]>(
+        `/reports/inventory-alerts${branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ""}`,
         { token },
       ),
     enabled: Boolean(token) && enabled,

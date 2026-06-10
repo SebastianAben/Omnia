@@ -78,13 +78,7 @@ export class DashboardService {
       payment_method_summary: sales.data.payment_method_summary,
       inventory_alerts: alerts.data.slice(0, 20),
       sync_health: syncHealth,
-      integration_health: [
-        {
-          integration: "shopee",
-          status: "not_configured",
-          last_checked_at: new Date(),
-        },
-      ],
+      integration_health: [],
     });
   }
 
@@ -128,7 +122,9 @@ export class DashboardService {
       select: { id: true, code: true, name: true },
     });
 
-    return Promise.all(branches.map((branch) => this.branchSyncHealth(branch.id)));
+    return Promise.all(
+      branches.map((branch) => this.branchSyncHealth(branch.id)),
+    );
   }
 
   private async branchSyncHealth(branchId?: string) {
@@ -144,9 +140,7 @@ export class DashboardService {
         select: { loggedAt: true, eventType: true },
       }),
     ]);
-    const counts = new Map(
-      jobs.map((job) => [job.status, job._count._all]),
-    );
+    const counts = new Map(jobs.map((job) => [job.status, job._count._all]));
     const failedJobs = counts.get(SyncJobStatus.FAILED) ?? 0;
     const conflictJobs = counts.get(SyncJobStatus.CONFLICT) ?? 0;
     const pendingJobs = counts.get(SyncJobStatus.PENDING) ?? 0;
@@ -169,4 +163,3 @@ export class DashboardService {
     };
   }
 }
-

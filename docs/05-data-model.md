@@ -4,18 +4,18 @@ Data model Omnia dibagi berdasarkan domain operasional. Implementasi aktual mema
 
 ## Domain dan Entitas
 
-| Domain | Entitas |
-| --- | --- |
-| Access | `Role`, `User`, `AuthSession` |
-| Branch | `Branch`, `Register`, `Shift` |
-| Product | `Category`, `Product`, `ProductVariant`, `BranchProductPrice` |
-| Inventory | `InventoryBalance`, `StockMovement` |
-| POS | `SalesTransaction`, `SalesTransactionItem`, `Payment` |
-| Omnichannel | `SalesChannel`, `ChannelStore`, `ProductChannelMapping`, `OnlineOrder`, `OnlineOrderItem` |
-| Integration | `WebhookEvent`, `IntegrationJob`, `IntegrationLog` |
-| AI | `AiInsight`, `InsightGenerationJob` |
-| Sync | `SyncJob`, `SyncLog` |
-| Audit | `AuditLog` |
+| Domain             | Entitas                                                                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Access             | `Role`, `User`, `AuthSession`                                                                                                 |
+| Branch             | `Branch`, `Register`, `Shift`                                                                                                 |
+| Product            | `Category`, `Product`, `ProductVariant`, `BranchProductPrice`                                                                 |
+| Inventory          | `InventoryBalance`, `StockMovement`                                                                                           |
+| POS                | `SalesTransaction`, `SalesTransactionItem`, `Payment`                                                                         |
+| Legacy Marketplace | `SalesChannel`, `ChannelStore`, `ProductChannelMapping`, `OnlineOrder`, `OnlineOrderItem` sampai migration removal diputuskan |
+| Legacy Integration | `WebhookEvent`, `IntegrationJob`, `IntegrationLog` sampai migration removal diputuskan                                        |
+| LLM/AI             | `AiInsight`, `InsightGenerationJob`, provider/prompt metadata yang dibutuhkan                                                 |
+| Sync               | `SyncJob`, `SyncLog`                                                                                                          |
+| Audit              | `AuditLog`                                                                                                                    |
 
 ## Relasi Penting
 
@@ -26,8 +26,7 @@ Data model Omnia dibagi berdasarkan domain operasional. Implementasi aktual mema
 - Sales transaction memiliki item dan payment.
 - Stock movement menjadi ledger perubahan stok.
 - Sync job memiliki banyak sync log.
-- Shopee order tersambung ke channel store dan item order.
-- Product channel mapping menghubungkan SKU marketplace ke produk internal.
+- Marketplace/Shopee relation lama tidak lagi menjadi scope aktif MVP.
 - Audit log menyimpan jejak aktivitas penting lintas modul.
 
 ## Aturan Data MVP
@@ -38,8 +37,13 @@ Data model Omnia dibagi berdasarkan domain operasional. Implementasi aktual mema
   dan `quantity_after`; mutation yang membuat stok negatif ditolak.
 - Tidak ada retur/refund kompleks pada MVP.
 - Payment dicatat manual; belum ada payment gateway langsung.
+- Close shift lokal menyimpan snapshot rekonsiliasi: total sales, cash,
+  non-cash, expected cash, closing cash, variance, dan pending transaction
+  warning metadata.
 - Sync harus idempotent agar replay tidak menggandakan data.
-- AI insight menyimpan severity, confidence, reference data, dan status generation.
+- LLM insight menyimpan severity, confidence, recommendation, reference data,
+  provider/model metadata, prompt version, output validation status, dan status
+  generation.
 
 ## Local Store
 
@@ -48,7 +52,7 @@ SQLite lokal menyimpan data minimum untuk cabang:
 - transaksi POS
 - item transaksi
 - payment
-- shift
+- shift, termasuk snapshot rekonsiliasi close-shift
 - stock movement
 - inventory balance/cache
 - sync queue

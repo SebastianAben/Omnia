@@ -29,7 +29,18 @@ Do not invent behavior that contradicts the PRD or numbered docs.
 
 - Preserve POS local-first behavior.
 - Treat POS branch runtime as Electron desktop app; plain browser mode is limited/fallback.
-- Do not make checkout depend on dashboard, Shopee, AI, or central connectivity.
+- Do not make checkout depend on dashboard, LLM insights, or central connectivity.
+- Shopee/marketplace integration is removed from active product scope; do not add new Shopee work unless the product scope is explicitly reopened.
+- Partial or incomplete features must be recorded as a next implementation phase
+  with an implementation plan, not only described as "pending".
+- Auto Reconciliation is the next feature priority: close shift must preview
+  total sales, cash, non-cash, expected cash, closing cash, and variance before
+  UAT acceptance.
+- High-volume POS UX is a next feature priority: product search/scan,
+  add-to-cart, quantity, payment, and checkout paths should be fast,
+  keyboard-friendly, and stock-safe.
+- LLM provider credentials must stay server-side and must never be exposed to the renderer, Electron preload public API, local SQLite, logs, or docs examples.
+- LLM output must be validated as structured data before persistence and must remain advisory-only.
 - Prefer existing project patterns before adding abstractions.
 - Keep code modular by business domain and avoid shared abstractions until duplication or complexity justifies them.
 - Treat performance as an engineering requirement: bound queries, avoid N+1 access, avoid heavy renders, and keep critical paths short.
@@ -56,6 +67,8 @@ Do not invent behavior that contradicts the PRD or numbered docs.
 - POS screens must stay fast and focused.
 - POS local-first features must work in Electron desktop runtime.
 - Avoid decorative UI that slows operational workflows.
+- Repetitive cashier and supervisor workflows should prioritize speed,
+  predictable controls, and clear recovery from errors.
 - Use role-based navigation only as UX.
 - Use TanStack Query for server state.
 - Use Zustand/local state for UI/cart/session-like state.

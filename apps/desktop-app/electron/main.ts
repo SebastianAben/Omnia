@@ -9,6 +9,10 @@ import {
   writeAuthSession,
   type AuthTokenPair,
 } from "./auth-session-store";
+import {
+  calculateShiftReconciliation,
+  type ShiftReconciliationSummary,
+} from "./shift-reconciliation";
 
 const isDev = process.env.NODE_ENV !== "production";
 const devServerUrl = process.env.OMNIA_DESKTOP_URL ?? "http://localhost:3000";
@@ -67,6 +71,14 @@ type ShiftEventInput = {
   shiftId?: string | null;
   openingCashAmount?: number;
   closingCashAmount?: number;
+  reconciliation?: ShiftReconciliationSummary | null;
+};
+
+type ShiftReconciliationPreviewInput = {
+  branchId: string;
+  registerId: string;
+  shiftId: string;
+  closingCashAmount: number;
 };
 
 type StockAdjustmentInput = {
@@ -207,6 +219,13 @@ function applyLocalStoreMigrations(dbPath: string) {
     "ALTER TABLE stock_movements_local ADD COLUMN notes TEXT;",
     "ALTER TABLE stock_movements_local ADD COLUMN performed_by_user_id TEXT;",
     "ALTER TABLE payments_local ADD COLUMN amount_received INTEGER;",
+    "ALTER TABLE shifts_local ADD COLUMN reconciliation_total_sales INTEGER;",
+    "ALTER TABLE shifts_local ADD COLUMN reconciliation_cash_payments INTEGER;",
+    "ALTER TABLE shifts_local ADD COLUMN reconciliation_non_cash_payments INTEGER;",
+    "ALTER TABLE shifts_local ADD COLUMN reconciliation_expected_cash INTEGER;",
+    "ALTER TABLE shifts_local ADD COLUMN reconciliation_variance INTEGER;",
+    "ALTER TABLE shifts_local ADD COLUMN reconciliation_pending_count INTEGER;",
+    "ALTER TABLE shifts_local ADD COLUMN reconciliation_pending_total INTEGER;",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_shifts_local_open_register ON shifts_local(register_id) WHERE status = 'open';",
   ];
 
@@ -796,6 +815,15 @@ function saveShiftEvent(input: ShiftEventInput) {
 
   const eventId = createId("evt");
   const eventType = input.action === "open" ? "shift.opened" : "shift.closed";
+  const reconciliation =
+    input.action === "close"
+      ? getShiftReconciliationPreview({
+          branchId: input.branch.id,
+          registerId: input.register.id,
+          shiftId,
+          closingCashAmount: input.closingCashAmount ?? 0,
+        })
+      : null;
   const payload = {
     shift: {
       id: shiftId,
@@ -806,6 +834,10 @@ function saveShiftEvent(input: ShiftEventInput) {
       closed_by_user_id: input.action === "close" ? input.user.id : undefined,
       opening_cash_amount: input.openingCashAmount ?? 0,
       closing_cash_amount: input.closingCashAmount ?? null,
+      reconciliation:
+        input.action === "close" && reconciliation
+          ? toShiftReconciliationPayload(reconciliation)
+          : undefined,
       occurred_at: occurredAt,
     },
   };
@@ -826,7 +858,7 @@ function saveShiftEvent(input: ShiftEventInput) {
           ]
             .map(sqlValue)
             .join(", ")});`
-        : `UPDATE shifts_local SET closed_by_user_id = ${sqlValue(input.user.id)}, closed_at = ${sqlValue(occurredAt)}, closing_cash_amount = ${sqlValue(input.closingCashAmount ?? 0)}, status = 'closed', sync_status = 'pending' WHERE id = ${sqlValue(shiftId)};`,
+        : `UPDATE shifts_local SET closed_by_user_id = ${sqlValue(input.user.id)}, closed_at = ${sqlValue(occurredAt)}, closing_cash_amount = ${sqlValue(input.closingCashAmount ?? 0)}, reconciliation_total_sales = ${sqlValue(reconciliation?.totalSales)}, reconciliation_cash_payments = ${sqlValue(reconciliation?.cashPayments)}, reconciliation_non_cash_payments = ${sqlValue(reconciliation?.nonCashPayments)}, reconciliation_expected_cash = ${sqlValue(reconciliation?.expectedCash)}, reconciliation_variance = ${sqlValue(reconciliation?.variance)}, reconciliation_pending_count = ${sqlValue(reconciliation?.pendingCount)}, reconciliation_pending_total = ${sqlValue(reconciliation?.pendingTotal)}, status = 'closed', sync_status = 'pending' WHERE id = ${sqlValue(shiftId)};`,
       `INSERT INTO sync_queue_local (id, event_id, event_type, event_version, branch_id, source_system, source_mode, entity_type, entity_id, payload_json, status, attempt_count, created_at) VALUES (${[
         createId("sync"),
         eventId,
@@ -879,6 +911,62 @@ function getActiveShift(branchId: string, registerId: string) {
         syncStatus: shift.sync_status,
       }
     : null;
+}
+
+function getShiftReconciliationPreview(input: ShiftReconciliationPreviewInput) {
+  assertValidShiftReconciliationPreviewInput(input);
+  const activeShift = getActiveShift(input.branchId, input.registerId);
+  if (!activeShift || activeShift.id !== input.shiftId) {
+    throw new Error(
+      "The active local shift does not match this reconciliation request.",
+    );
+  }
+
+  const paidPayments = querySql<{ method: string; amount: number }>(
+    `SELECT p.method, p.amount FROM payments_local p INNER JOIN sales_transactions_local t ON t.id = p.transaction_id WHERE t.shift_id = ${sqlValue(input.shiftId)} AND t.branch_id = ${sqlValue(input.branchId)} AND t.register_id = ${sqlValue(input.registerId)} AND lower(t.payment_status) = 'paid' AND lower(p.status) = 'paid';`,
+  );
+  const pendingTransactions = querySql<{ total: number }>(
+    `SELECT grand_total as total FROM sales_transactions_local WHERE shift_id = ${sqlValue(input.shiftId)} AND branch_id = ${sqlValue(input.branchId)} AND register_id = ${sqlValue(input.registerId)} AND lower(payment_status) <> 'paid';`,
+  );
+
+  return calculateShiftReconciliation({
+    openingCash: activeShift.openingCashAmount,
+    closingCash: input.closingCashAmount,
+    paidPayments: paidPayments.map((payment) => ({
+      method: payment.method,
+      amount: Number(payment.amount),
+    })),
+    pendingTransactions: pendingTransactions.map((transaction) => ({
+      total: Number(transaction.total),
+    })),
+  });
+}
+
+function assertValidShiftReconciliationPreviewInput(
+  input: ShiftReconciliationPreviewInput,
+) {
+  if (!input.branchId || !input.registerId || !input.shiftId) {
+    throw new Error(
+      "Shift reconciliation requires branch, register, and shift.",
+    );
+  }
+  if (!Number.isFinite(input.closingCashAmount) || input.closingCashAmount < 0) {
+    throw new Error("Closing cash must be a non-negative number.");
+  }
+}
+
+function toShiftReconciliationPayload(summary: ShiftReconciliationSummary) {
+  return {
+    total_sales: summary.totalSales,
+    cash_payments: summary.cashPayments,
+    non_cash_payments: summary.nonCashPayments,
+    opening_cash: summary.openingCash,
+    expected_cash: summary.expectedCash,
+    closing_cash: summary.closingCash,
+    variance: summary.variance,
+    pending_count: summary.pendingCount,
+    pending_total: summary.pendingTotal,
+  };
 }
 
 function assertValidShiftEventInput(input: ShiftEventInput) {
@@ -1104,6 +1192,11 @@ function registerLocalStoreHandlers() {
     "omnia:local-store:get-active-shift",
     (_event, input: { branchId: string; registerId: string }) =>
       getActiveShift(input.branchId, input.registerId),
+  );
+  ipcMain.handle(
+    "omnia:local-store:get-shift-reconciliation-preview",
+    (_event, input) =>
+      getShiftReconciliationPreview(input as ShiftReconciliationPreviewInput),
   );
 }
 

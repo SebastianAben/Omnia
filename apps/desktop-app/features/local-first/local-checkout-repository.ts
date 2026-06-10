@@ -78,6 +78,18 @@ export type LocalActiveShift = {
   syncStatus: LocalTransactionRecord["syncStatus"];
 };
 
+export type LocalShiftReconciliationPreview = {
+  totalSales: number;
+  cashPayments: number;
+  nonCashPayments: number;
+  openingCash: number;
+  expectedCash: number;
+  closingCash: number;
+  variance: number;
+  pendingCount: number;
+  pendingTotal: number;
+};
+
 type LocalStoreBridge = {
   saveCheckout: (input: unknown) => Promise<{
     transactionId: string;
@@ -110,6 +122,12 @@ type LocalStoreBridge = {
     branchId: string;
     registerId: string;
   }) => Promise<LocalActiveShift | null>;
+  getShiftReconciliationPreview: (input: {
+    branchId: string;
+    registerId: string;
+    shiftId: string;
+    closingCashAmount: number;
+  }) => Promise<LocalShiftReconciliationPreview>;
 };
 
 const requireLocalStore = () => {
@@ -210,6 +228,7 @@ export async function saveShiftEvent(input: {
   shiftId?: string | null;
   openingCashAmount?: number;
   closingCashAmount?: number;
+  reconciliation?: LocalShiftReconciliationPreview | null;
 }) {
   return requireLocalStore().saveShiftEvent({
     ...input,
@@ -222,4 +241,13 @@ export async function getLocalActiveShift(
   registerId: string,
 ) {
   return requireLocalStore().getActiveShift({ branchId, registerId });
+}
+
+export async function getShiftReconciliationPreview(input: {
+  branchId: string;
+  registerId: string;
+  shiftId: string;
+  closingCashAmount: number;
+}) {
+  return requireLocalStore().getShiftReconciliationPreview(input);
 }

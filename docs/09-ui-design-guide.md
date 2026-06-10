@@ -25,24 +25,23 @@ UI Omnia harus terasa seperti aplikasi operasional retail: cepat, jelas, padat, 
 7. Inventory adjustment.
 8. Sync status.
 9. Dashboard branch/central.
-10. Shopee SKU mapping/order monitoring.
-11. AI insights.
-12. Audit log.
+10. LLM insights.
+11. Audit log.
 
 ## Role UI
 
-| Role | Menu utama |
-| --- | --- |
-| Cashier | POS, Shift, Receipts, Sync. |
+| Role       | Menu utama                                                      |
+| ---------- | --------------------------------------------------------------- |
+| Cashier    | POS, Shift, Receipts, Sync.                                     |
 | Supervisor | Dashboard cabang, POS, Shift, Inventory, Receipts, Sync, Audit. |
-| HQ Admin | Dashboard pusat, AI, Shopee, Sync, Audit, POS preview. |
-| Executive | Dashboard pusat, AI, Sync, Audit. |
+| HQ Admin   | Dashboard pusat, LLM Insights, Sync, Audit, POS preview.        |
+| Executive  | Dashboard pusat, LLM Insights, Sync, Audit.                     |
 
 ## Implementation Notes
 
 - UI role-based hanya menyembunyikan menu; backend tetap wajib enforce permission.
 - Dashboard membaca central DB/API, bukan local SQLite.
-- POS checkout harus tetap bisa dipakai tanpa dashboard/Shopee/AI aktif.
+- POS checkout harus tetap bisa dipakai tanpa dashboard/LLM aktif.
 - Figma/Stitch boleh menjadi acuan visual, tetapi tidak boleh melanggar prinsip local-first.
 
 ## UI Gap Aktual
@@ -50,4 +49,3 @@ UI Omnia harus terasa seperti aplikasi operasional retail: cepat, jelas, padat, 
 - UI sudah fungsional, tetapi belum pixel-perfect dari Figma/Stitch.
 - Receipt printing nyata belum selesai.
 - Conflict resolver UI belum tersedia.
-

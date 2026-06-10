@@ -19,12 +19,12 @@ Dengan pola ini, UI tetap memakai stack web modern, tetapi fitur lokal berjalan 
 
 ## Boundary Wajib
 
-| Layer | Boleh | Tidak boleh |
-| --- | --- | --- |
-| Renderer Next.js | UI, state, API call, memanggil bridge | Akses SQLite langsung, akses Node langsung |
-| Preload | Expose API kecil via `contextBridge` | Membuka seluruh Node API ke renderer |
-| Electron main | SQLite, file system, local sync, native integration | Logic UI/React |
-| Backend pusat | Auth, sync apply, dashboard, Shopee, AI | Menjadi dependency wajib untuk checkout lokal |
+| Layer            | Boleh                                               | Tidak boleh                                   |
+| ---------------- | --------------------------------------------------- | --------------------------------------------- |
+| Renderer Next.js | UI, state, API call, memanggil bridge               | Akses SQLite langsung, akses Node langsung    |
+| Preload          | Expose API kecil via `contextBridge`                | Membuka seluruh Node API ke renderer          |
+| Electron main    | SQLite, file system, local sync, native integration | Logic UI/React                                |
+| Backend pusat    | Auth, sync apply, dashboard, audit, LLM insight     | Menjadi dependency wajib untuk checkout lokal |
 
 ## Kondisi Aktual
 
@@ -138,14 +138,14 @@ Sebelum menyebut Omnia siap sebagai app:
 
 ## Risiko dan Mitigasi
 
-| Risiko | Mitigasi |
-| --- | --- |
-| Next standalone tidak bisa diload dengan `loadFile` | Jalankan local Next server dari Electron main atau gunakan static export. |
-| SQLite binary tidak ada di mesin user | Bundle binary atau gunakan native package yang dipaketkan dengan Electron. |
-| Renderer mencoba akses local store dari browser | Selalu cek bridge dan tampilkan fallback. |
-| Port local server bentrok | Gunakan port dinamis/internal dan health check. |
-| File DB berada di path read-only | Simpan DB di app user data/writable directory. |
-| Native module tidak cocok Electron ABI | Tambahkan rebuild/package step untuk Electron. |
+| Risiko                                              | Mitigasi                                                                   |
+| --------------------------------------------------- | -------------------------------------------------------------------------- |
+| Next standalone tidak bisa diload dengan `loadFile` | Jalankan local Next server dari Electron main atau gunakan static export.  |
+| SQLite binary tidak ada di mesin user               | Bundle binary atau gunakan native package yang dipaketkan dengan Electron. |
+| Renderer mencoba akses local store dari browser     | Selalu cek bridge dan tampilkan fallback.                                  |
+| Port local server bentrok                           | Gunakan port dinamis/internal dan health check.                            |
+| File DB berada di path read-only                    | Simpan DB di app user data/writable directory.                             |
+| Native module tidak cocok Electron ABI              | Tambahkan rebuild/package step untuk Electron.                             |
 
 ## Rule untuk Implementasi Berikutnya
 

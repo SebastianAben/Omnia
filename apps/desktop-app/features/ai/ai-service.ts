@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api-client";
 
@@ -32,8 +32,37 @@ export type AiInsightFilters = {
   generatedAfter?: string;
 };
 
+export type AiGenerationResult = {
+  job_id: string;
+  status: "success" | "failed" | "insufficient_data" | "cached" | string;
+  insight_count: number;
+  error_code?: string;
+  error_message?: string;
+  provider: string;
+  model: string;
+};
+
+export type AiGenerationJob = {
+  id: string;
+  status:
+    | "processing"
+    | "success"
+    | "failed"
+    | "insufficient_data"
+    | "cached"
+    | string;
+  started_at: string | null;
+  finished_at: string | null;
+  insight_count: number;
+  error_code: string | null;
+  error_message: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
 export const aiKeys = {
   all: ["ai"] as const,
+  generationJobs: () => [...aiKeys.all, "generation-jobs"] as const,
   insights: (filters: AiInsightFilters) =>
     [...aiKeys.all, "insights", filters] as const,
   lowStock: (branchId?: string) =>
@@ -41,6 +70,34 @@ export const aiKeys = {
   stockout: (branchId?: string) =>
     [...aiKeys.all, "stockout", branchId] as const,
 };
+
+export function useAiGenerationJobs(token?: string) {
+  return useQuery({
+    queryKey: aiKeys.generationJobs(),
+    queryFn: () =>
+      apiFetch<AiGenerationJob[]>("/ai/generation-jobs", { token }),
+    enabled: Boolean(token),
+    staleTime: 30_000,
+  });
+}
+
+export function useGenerateAiInsights(token?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<AiGenerationResult>("/ai/insights/generate", {
+        method: "POST",
+        token,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: aiKeys.all }),
+        queryClient.invalidateQueries({ queryKey: aiKeys.generationJobs() }),
+      ]);
+    },
+  });
+}
 
 export function useAiInsights(filters: AiInsightFilters, token?: string) {
   return useQuery({
