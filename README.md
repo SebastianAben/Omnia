@@ -29,9 +29,38 @@ docs/            product, technical, design, deployment, and workflow docs
 
 - Node.js 20+
 - pnpm 9+
-- Docker dan Docker Compose untuk PostgreSQL/Redis local
+- Docker dan Docker Compose untuk PostgreSQL/Redis/backend/renderer local
+- `sqlite3` CLI tersedia di host untuk Electron local-first SQLite
 
 ## Setup Local
+
+### Docker Services + Native Electron
+
+Flow ini direkomendasikan untuk demo/UAT lintas Windows dan macOS. Docker menjalankan PostgreSQL, Redis, migration, seed demo user, backend API, dan renderer web. Electron tetap berjalan native di host agar bisa memakai SQLite lokal dan secure storage OS.
+
+Jalankan satu kali jika dependencies host belum tersedia:
+
+```bash
+corepack enable
+corepack prepare pnpm@10.17.0 --activate
+pnpm install
+```
+
+Setiap menjalankan aplikasi, buka terminal pertama:
+
+```bash
+docker compose up --build
+```
+
+Buka terminal kedua untuk Electron native:
+
+```bash
+pnpm --filter @omnia/desktop-app electron:docker
+```
+
+Data PostgreSQL dan Redis tersimpan di Docker named volume. Data tidak hilang saat `docker compose down`; data hilang jika menjalankan `docker compose down -v` atau menghapus volume Docker secara manual. SQLite lokal Electron tersimpan di user data host dan tidak bergantung pada container.
+
+### Full Local Dev Script
 
 Cara paling sederhana untuk menjalankan seluruh aplikasi lokal:
 

@@ -2,7 +2,7 @@ FROM node:22-alpine AS deps
 
 WORKDIR /app
 
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.17.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/backend-api/package.json apps/backend-api/package.json
@@ -27,7 +27,7 @@ FROM node:22-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.17.0 --activate
 
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules

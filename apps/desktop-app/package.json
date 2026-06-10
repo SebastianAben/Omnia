@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "dev:desktop": "pnpm build:electron && concurrently -k \"next dev -p 3000\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:docker": "pnpm build:electron && wait-on http://localhost:3000 && electron .",
     "build": "next build && pnpm build:electron",
     "build:electron": "tsc -p tsconfig.electron.json",
     "localdb:init": "powershell -ExecutionPolicy Bypass -File ./local-store/init-local-db.ps1",
@@ -26,10 +27,10 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
     "@types/node": "^24.5.2",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
-    "@eslint/eslintrc": "^3.3.1",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
     "electron": "^38.1.2",
