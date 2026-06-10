@@ -6,6 +6,7 @@ import { Button, Badge } from "@omnia/ui";
 import { WorkspacePanel } from "@/components/app-shell";
 import { useAppState } from "@/lib/app-state";
 import {
+  closeShiftWithSync,
   getLocalActiveShift,
   getShiftReconciliationPreview,
   isLocalStoreBridgeAvailable,
@@ -22,6 +23,7 @@ export function ShiftPanel() {
   const branch = useAppState((state) => state.branch);
   const register = useAppState((state) => state.register);
   const user = useAppState((state) => state.user);
+  const token = useAppState((state) => state.token);
   const [openingCashAmount, setOpeningCashAmount] = useState(100000);
   const [closingCashAmount, setClosingCashAmount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
@@ -156,6 +158,10 @@ export function ShiftPanel() {
     }
 
     setError(null);
+    if (!token) {
+      setError("Login session is required before closing shift with sync.");
+      return;
+    }
     if (!Number.isFinite(closingCashAmount) || closingCashAmount < 0) {
       setError("Closing cash must be a non-negative number.");
       return;
@@ -168,14 +174,14 @@ export function ShiftPanel() {
         shiftId: activeShiftId,
         closingCashAmount,
       });
-      await saveShiftEvent({
+      await closeShiftWithSync({
         branch,
         register,
         user,
-        action: "close",
         shiftId: activeShiftId,
         closingCashAmount,
         reconciliation: finalPreview,
+        token,
       });
       setActiveShiftId(undefined);
       setShiftStatus("closed");

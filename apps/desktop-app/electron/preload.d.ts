@@ -137,6 +137,17 @@ declare global {
           shiftId: string;
           eventId: string;
         }>;
+        closeShiftWithSync: (input: unknown) => Promise<{
+          shiftId: string;
+          eventId: string;
+          replay: {
+            attempted: number;
+            synced: number;
+            failed: number;
+            conflict: number;
+            deferred: number;
+          };
+        }>;
         getActiveShift: (input: {
           branchId: string;
           registerId: string;
