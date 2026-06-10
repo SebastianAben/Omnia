@@ -310,7 +310,6 @@ async function main(): Promise<void> {
         },
       },
       update: {
-        quantityOnHand: item.mainStock,
         minimumStockThreshold: item.threshold,
       },
       create: {
@@ -329,7 +328,6 @@ async function main(): Promise<void> {
         },
       },
       update: {
-        quantityOnHand: item.secondStock,
         minimumStockThreshold: item.threshold,
       },
       create: {
