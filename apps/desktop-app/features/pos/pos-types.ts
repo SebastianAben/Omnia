@@ -17,7 +17,7 @@ export type CartLine = {
 };
 
 export type PaymentMethod = "cash" | "transfer" | "qris" | "debit";
-export type PaymentStatus = "paid" | "pending";
+export type PaymentStatus = "paid";
 
 export type CartTotals = {
   itemCount: number;

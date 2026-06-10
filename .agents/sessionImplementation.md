@@ -231,6 +231,8 @@ Backend scope:
 Frontend scope:
 
 - Product search/catalog, stock-bounded cart, totals, and manual payment.
+- POS checkout is paid-only in the cashier flow; do not expose a pending
+  payment option unless a full pending-order settlement flow is added.
 - Save transaction, items, payment, stock movements, and sync queue atomically
   through Electron main process.
 - Recompute checkout totals and authoritative local stock in Electron main

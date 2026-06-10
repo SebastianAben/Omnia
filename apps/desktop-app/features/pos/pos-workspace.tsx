@@ -26,7 +26,7 @@ import {
 import { getCheckoutGuardMessage } from "@/features/uat/operational-copy";
 import { useCartStore } from "./cart-store";
 import { loadFallbackCatalog, loadPosCatalog } from "./product-service";
-import type { PaymentMethod, PaymentStatus } from "./pos-types";
+import type { PaymentMethod } from "./pos-types";
 import {
   calculateCartTotals,
   findExactCatalogMatch,
@@ -39,11 +39,6 @@ const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
   { value: "transfer", label: "Transfer" },
   { value: "qris", label: "QRIS" },
   { value: "debit", label: "Debit" },
-];
-
-const paymentStatusOptions: Array<{ value: PaymentStatus; label: string }> = [
-  { value: "paid", label: "Paid" },
-  { value: "pending", label: "Pending" },
 ];
 
 const catalogResultLimit = 24;
@@ -72,8 +67,6 @@ export function PosWorkspace() {
     (state) => state.selectedPaymentMethod,
   );
   const setPaymentMethod = useCartStore((state) => state.setPaymentMethod);
-  const paymentStatus = useCartStore((state) => state.paymentStatus);
-  const setPaymentStatus = useCartStore((state) => state.setPaymentStatus);
   const amountReceived = useCartStore((state) => state.amountReceived);
   const setAmountReceived = useCartStore((state) => state.setAmountReceived);
 
@@ -89,7 +82,8 @@ export function PosWorkspace() {
     [catalogQuery.data, token],
   );
   const catalogResult = useMemo(
-    () => getCatalogSearchResult(products, query, { limit: catalogResultLimit }),
+    () =>
+      getCatalogSearchResult(products, query, { limit: catalogResultLimit }),
     [products, query],
   );
   const visibleProducts = catalogResult.items;
@@ -126,7 +120,7 @@ export function PosWorkspace() {
       return;
     }
 
-    if (paymentStatus === "paid" && amountReceived < totals.grandTotal) {
+    if (amountReceived < totals.grandTotal) {
       setCheckoutMessage(getCheckoutGuardMessage("payment_insufficient"));
       return;
     }
@@ -141,7 +135,6 @@ export function PosWorkspace() {
         lines,
         totals,
         paymentMethod: selectedPaymentMethod,
-        paymentStatus,
         amountReceived,
       });
       const queue = await listLocalSyncQueue();
@@ -169,7 +162,6 @@ export function PosWorkspace() {
     canCheckout,
     clearCart,
     lines,
-    paymentStatus,
     register,
     selectedPaymentMethod,
     setPendingSyncCount,
@@ -299,8 +291,8 @@ export function PosWorkspace() {
                 Transaksi POS
               </h1>
               <p className="mt-3 max-w-[62ch] text-sm leading-6 text-slate-600">
-                Cari produk, atur jumlah dan diskon item, pilih pembayaran, lalu
-                simpan transaksi ke antrean lokal.
+                Cari produk, atur jumlah, pilih metode pembayaran, lalu simpan
+                transaksi lunas ke antrean lokal.
               </p>
             </div>
           </div>
@@ -529,7 +521,10 @@ export function PosWorkspace() {
                       <Plus size={14} aria-hidden="true" />
                     </Button>
                   </div>
-                  <label className="sr-only" htmlFor={`quantity-${line.product.id}`}>
+                  <label
+                    className="sr-only"
+                    htmlFor={`quantity-${line.product.id}`}
+                  >
                     Jumlah {line.product.name}
                   </label>
                   <input
@@ -608,20 +603,6 @@ export function PosWorkspace() {
               variant={
                 selectedPaymentMethod === option.value ? "primary" : "secondary"
               }
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {paymentStatusOptions.map((option) => (
-            <Button
-              className="px-2"
-              key={option.value}
-              onClick={() => setPaymentStatus(option.value)}
-              type="button"
-              variant={paymentStatus === option.value ? "primary" : "secondary"}
             >
               {option.label}
             </Button>

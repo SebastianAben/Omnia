@@ -11,6 +11,12 @@ import type {
 } from "@/features/pos/pos-types";
 import { getApiBaseUrl } from "@/lib/api-client";
 
+export type LocalPaymentStatus =
+  | PaymentStatus
+  | "pending"
+  | "partially_paid"
+  | "failed";
+
 export type LocalTransactionRecord = {
   id: string;
   transactionNo: string;
@@ -20,7 +26,7 @@ export type LocalTransactionRecord = {
   totals: CartTotals;
   lines: CartLine[];
   paymentMethod: PaymentMethod;
-  paymentStatus: PaymentStatus;
+  paymentStatus: LocalPaymentStatus;
   amountReceived: number;
   createdAt: string;
   syncStatus: "pending" | "queued" | "synced" | "failed" | "conflict";
@@ -165,11 +171,11 @@ export async function saveCheckoutLocally(input: {
   lines: CartLine[];
   totals: CartTotals;
   paymentMethod: PaymentMethod;
-  paymentStatus: PaymentStatus;
   amountReceived: number;
 }) {
   return requireLocalStore().saveCheckout({
     ...input,
+    paymentStatus: "paid" satisfies PaymentStatus,
     sourceMode: getLocalSourceMode(),
   });
 }

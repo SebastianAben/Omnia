@@ -41,6 +41,64 @@ acceptance have not passed.
 
 ## Latest Completed Work
 
+- 2026-06-10 15:33 WIB: implemented paid-only POS checkout and fixed app
+  shell/sidebar layout.
+- Removed the cashier-facing Pending payment option from POS; new POS checkout
+  saves only paid transactions and always requires amount received to cover the
+  grand total.
+- Kept sync queue `pending` statuses as technical offline replay state, separate
+  from payment status.
+- Tightened Electron local checkout validation so POS checkout rejects non-paid
+  payment status at the main-process boundary.
+- Updated Shift reconciliation copy to treat any unpaid local rows as legacy
+  handoff warnings rather than a normal POS path.
+- App shell now uses a fixed viewport layout: sidebar stays viewport-height and
+  only the main content panel scrolls between pages.
+- Updated related docs: data model, sync specification, UI design guide, UAT
+  checklist, implementation roadmap, and this handoff.
+- Validation passed: `pnpm typecheck`, `pnpm lint`,
+  `pnpm test:backend:vitest` (8 files, 38 tests), `pnpm build`,
+  `pnpm test:e2e` with web layout/POS paid-only assertions plus Electron
+  open-shift, paid checkout, and close-shift flow,
+  `pnpm --filter @omnia/backend-api db:migrate:local`,
+  `pnpm --filter @omnia/backend-api prisma:seed`, and
+  `API_BASE_URL=http://localhost:4103/api/v1 pnpm smoke:mvp`.
+- Smoke note: port 4102 was already occupied during this run, so the smoke
+  backend was started on port 4103. The smoke server was stopped afterward;
+  existing Docker PostgreSQL/Redis services were left running for manual
+  testing.
+- Remaining risk: packaged Electron validation and full manual UAT are still
+  pending after this UI/flow change.
+- 2026-06-10 15:04 WIB: completed post-implementation testing harness and
+  validation pass for Phase/Stage 12 readiness.
+- Installed and configured Vitest for backend unit tests; backend `test:unit`
+  and `test:vitest` now run `vitest run`, with the existing auth, access-scope,
+  LLM, reporting, CSV, and sync tests migrated from `node:test`/top-level
+  assertions to Vitest suites.
+- Installed and configured Playwright E2E at the root with separate web and
+  Electron projects plus scripts for `test:e2e:web`, `test:e2e:electron`, and
+  `test:e2e`.
+- Added browser fallback E2E coverage for demo cashier login/navigation and the
+  expected browser-only local SQLite warning.
+- Added Electron E2E coverage for demo login plus local SQLite/preload-backed
+  shift open/close using an isolated temporary `userData` directory.
+- Fixed Electron development CSP so Next.js dev hydration and HMR work in
+  Electron while preserving the stricter production CSP path.
+- Validation passed: `pnpm typecheck`, `pnpm lint`,
+  `pnpm test:backend:vitest` (8 files, 38 tests), `pnpm build`,
+  `pnpm test:e2e:web`, `pnpm test:e2e:electron`, `pnpm test:e2e`,
+  `docker compose up -d postgres redis`,
+  `pnpm --filter @omnia/backend-api db:migrate:local`,
+  `pnpm --filter @omnia/backend-api prisma:seed`, and
+  `API_BASE_URL=http://localhost:4102/api/v1 pnpm smoke:mvp`.
+- Smoke note: port 4000 was already occupied by another Node service, so Omnia
+  backend was started on port 4102 for smoke validation. LLM generation returned
+  the expected local missing-key `failed` status accepted by the smoke script.
+- Remaining risk: packaged Electron installer/runtime validation, full manual
+  UAT checklist execution, and live Gemini validation with a real `LLM_API_KEY`
+  remain pending.
+- Next recommended step: run packaged Electron smoke on the target operating
+  system and then execute the Phase 17 UAT checklist.
 - 2026-06-10 12:54 WIB: implemented Phase 17 UI/UX Consistency UAT Polish.
 - Added shared frontend UI state primitives for inline feedback and state panels
   plus tested operational copy helpers for checkout guard messages and sync
@@ -138,15 +196,16 @@ acceptance have not passed.
 - 2026-06-10: implemented Phase 13 Close Shift Auto Reconciliation.
 - Close shift now computes local SQLite reconciliation preview for paid shift
   transactions: total sales, cash payments, non-cash payments, opening cash,
-  expected cash, closing cash, variance, pending transaction count, and pending
-  transaction total.
+  expected cash, closing cash, variance, and legacy unpaid local transaction
+  warning totals when present.
 - Added Electron main-process reconciliation calculation and IPC preview bridge;
   close shift recomputes the final snapshot in the main process before writing
   the local shift close record and `shift.closed` sync payload metadata.
 - Added nullable local `shifts_local` reconciliation columns plus idempotent
   local migration statements; no central Prisma migration was added.
 - Updated Shift UI to show reconciliation preview before close, highlight
-  non-zero variance, show pending transaction warnings, and keep close available.
+  non-zero variance, show legacy unpaid local transaction warnings, and keep
+  close available.
 - Backend sync validation now explicitly accepts optional `shift.closed`
   reconciliation metadata without persisting new central columns.
 - Added desktop reconciliation unit coverage and backend sync coverage for close

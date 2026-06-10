@@ -42,6 +42,10 @@ UI Omnia harus terasa seperti aplikasi operasional retail: cepat, jelas, padat, 
 - UI role-based hanya menyembunyikan menu; backend tetap wajib enforce permission.
 - Dashboard membaca central DB/API, bukan local SQLite.
 - POS checkout harus tetap bisa dipakai tanpa dashboard/LLM aktif.
+- POS checkout kasir hanya menampilkan pembayaran lunas; jangan expose status
+  pembayaran Pending di POS karena alurnya belum memiliki penyelesaian order.
+- App shell desktop harus menjaga sidebar tetap setinggi viewport; scroll
+  halaman terjadi di area konten utama, bukan pada sidebar atau body.
 - Figma/Stitch boleh menjadi acuan visual, tetapi tidak boleh melanggar prinsip local-first.
 
 ## UI Gap Aktual

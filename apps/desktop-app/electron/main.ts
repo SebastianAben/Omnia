@@ -16,7 +16,11 @@ import {
 
 const isDev = process.env.NODE_ENV !== "production";
 const devServerUrl = process.env.OMNIA_DESKTOP_URL ?? "http://localhost:3000";
+const userDataDirOverride = process.env.OMNIA_USER_DATA_DIR;
 const checkoutEventType = "transaction.bundle";
+const contentSecurityPolicy = isDev
+  ? "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*;"
+  : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:*;";
 const replayBatchSize = 10;
 const replayMaxBackoffMs = 5 * 60 * 1000;
 const supportedReplayEventTypes = [
@@ -58,7 +62,7 @@ type SaveCheckoutInput = {
     grandTotal: number;
   };
   paymentMethod: string;
-  paymentStatus: "paid" | "pending";
+  paymentStatus: "paid";
   amountReceived: number;
 };
 
@@ -156,7 +160,9 @@ const getLocalSchemaPath = () => {
     path.join(getDesktopRoot(), "local-store", "schema.sql"),
     path.join(process.resourcesPath, "local-store", "schema.sql"),
   ];
-  const schemaPath = candidatePaths.find((candidate) => fs.existsSync(candidate));
+  const schemaPath = candidatePaths.find((candidate) =>
+    fs.existsSync(candidate),
+  );
 
   if (!schemaPath) {
     throw new Error("Local SQLite schema file is missing from the app bundle.");
@@ -244,7 +250,9 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
   assertValidCheckoutInput(input);
   const activeShift = getActiveShift(input.branch.id, input.register.id);
   if (!activeShift || activeShift.id !== input.shiftId) {
-    throw new Error("Checkout requires the active local shift for this register.");
+    throw new Error(
+      "Checkout requires the active local shift for this register.",
+    );
   }
 
   const checkoutLines = resolveCheckoutLines(input);
@@ -294,7 +302,7 @@ function saveCheckoutLocally(input: SaveCheckoutInput) {
         amount: totals.grandTotal,
         payment_status: input.paymentStatus,
         payment_reference: null,
-        paid_at: input.paymentStatus === "paid" ? createdAt : null,
+        paid_at: createdAt,
         notes:
           input.paymentMethod === "cash"
             ? `amount_received:${input.amountReceived}`
@@ -450,7 +458,10 @@ function assertValidCheckoutInput(input: SaveCheckoutInput) {
     throw new Error("Cart is empty.");
   }
 
-  if (new Set(input.lines.map((line) => line.product.id)).size !== input.lines.length) {
+  if (
+    new Set(input.lines.map((line) => line.product.id)).size !==
+    input.lines.length
+  ) {
     throw new Error("Cart contains duplicate product lines.");
   }
 
@@ -472,17 +483,14 @@ function assertValidCheckoutInput(input: SaveCheckoutInput) {
   if (!["cash", "transfer", "qris", "debit"].includes(input.paymentMethod)) {
     throw new Error("Unsupported payment method.");
   }
-  if (!["paid", "pending"].includes(input.paymentStatus)) {
-    throw new Error("Unsupported payment status.");
+  if (input.paymentStatus !== "paid") {
+    throw new Error("POS checkout only supports paid transactions.");
   }
   if (!Number.isFinite(input.amountReceived) || input.amountReceived < 0) {
     throw new Error("Amount received must be a non-negative number.");
   }
 
-  if (
-    input.paymentStatus === "paid" &&
-    input.amountReceived < input.totals.grandTotal
-  ) {
+  if (input.amountReceived < input.totals.grandTotal) {
     throw new Error("Paid checkout requires enough amount received.");
   }
 }
@@ -495,10 +503,7 @@ function resolveCheckoutLines(input: SaveCheckoutInput) {
     `SELECT product_id, quantity FROM inventory_balances_local WHERE branch_id = ${sqlValue(input.branch.id)} AND product_id IN (${input.lines.map((line) => sqlValue(line.product.id)).join(", ")});`,
   );
   const quantityByProduct = new Map(
-    balances.map((balance) => [
-      balance.product_id,
-      Number(balance.quantity),
-    ]),
+    balances.map((balance) => [balance.product_id, Number(balance.quantity)]),
   );
 
   return input.lines.map((line) => {
@@ -810,7 +815,9 @@ function saveShiftEvent(input: ShiftEventInput) {
     input.action === "close" &&
     (!activeShift || activeShift.id !== shiftId)
   ) {
-    throw new Error("The active local shift does not match this close request.");
+    throw new Error(
+      "The active local shift does not match this close request.",
+    );
   }
 
   const eventId = createId("evt");
@@ -950,7 +957,10 @@ function assertValidShiftReconciliationPreviewInput(
       "Shift reconciliation requires branch, register, and shift.",
     );
   }
-  if (!Number.isFinite(input.closingCashAmount) || input.closingCashAmount < 0) {
+  if (
+    !Number.isFinite(input.closingCashAmount) ||
+    input.closingCashAmount < 0
+  ) {
     throw new Error("Closing cash must be a non-negative number.");
   }
 }
@@ -972,8 +982,8 @@ function toShiftReconciliationPayload(summary: ShiftReconciliationSummary) {
 function assertValidShiftEventInput(input: ShiftEventInput) {
   const amount =
     input.action === "open"
-      ? input.openingCashAmount ?? 0
-      : input.closingCashAmount ?? 0;
+      ? (input.openingCashAmount ?? 0)
+      : (input.closingCashAmount ?? 0);
 
   if (!Number.isFinite(amount) || amount < 0) {
     throw new Error("Shift cash amount must be a non-negative number.");
@@ -1223,9 +1233,7 @@ function createMainWindow() {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
-          "Content-Security-Policy": [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:*;",
-          ],
+          "Content-Security-Policy": [contentSecurityPolicy],
         },
       });
     },
@@ -1270,6 +1278,10 @@ function isSafeExternalUrl(url: string) {
   } catch {
     return false;
   }
+}
+
+if (isDev && userDataDirOverride) {
+  app.setPath("userData", userDataDirOverride);
 }
 
 app.whenReady().then(() => {

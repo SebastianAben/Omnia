@@ -45,8 +45,9 @@ Untuk event shift:
 - Satu register hanya boleh memiliki satu shift `OPEN`.
 - Close hanya valid untuk shift lokal/pusat yang masih `OPEN`.
 - `shift.closed` boleh membawa metadata `reconciliation` untuk total sales,
-  cash, non-cash, expected cash, closing cash, variance, dan pending transaction
-  warning; metadata ini tidak membuat migrasi kolom pusat baru pada MVP.
+  cash, non-cash, expected cash, closing cash, variance, dan peringatan
+  transaksi lokal lama yang belum lunas jika masih ada; metadata ini tidak
+  membuat migrasi kolom pusat baru pada MVP.
 - Duplicate event ID dikembalikan sebagai hasil idempotent.
 
 ## Transaction Bundle
@@ -66,7 +67,8 @@ Validasi minimum bundle:
 - cashier, register, branch, product, dan shift harus aktif serta konsisten
 - waktu transaksi harus berada dalam rentang shift
 - total header harus sama dengan agregasi item dan diskon
-- pembayaran `paid` harus mencukupi total transaksi
+- transaksi POS baru harus dikirim sebagai `paid` dan pembayaran harus
+  mencukupi total transaksi
 - actor dan source ID stock movement harus cocok dengan transaksi
 - agregasi kuantitas movement penjualan harus sama dengan item
 - saldo stok pusat tidak boleh menjadi negatif

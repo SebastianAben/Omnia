@@ -9,7 +9,8 @@ change permission, checkout, sync, stock, or LLM safety contracts.
 - POS search/scan keeps focus ready for repeated entry.
 - Cart quantity, discount, payment method, amount received, and checkout errors
   explain the next action.
-- Checkout requires an open shift and sufficient paid amount.
+- Checkout requires an open shift and sufficient received amount; POS no longer
+  exposes a Pending payment option.
 - Receipt preview shows local transaction, payment, received amount, change, and
   sync status.
 - Sync Status explains pending, failed, conflict, and synced events.
@@ -19,7 +20,7 @@ change permission, checkout, sync, stock, or LLM safety contracts.
 - Inventory shows out-of-stock and low-stock alerts with actionable copy.
 - Stock adjustment prevents negative stock and reports the queued sync event.
 - Shift close shows sales, cash, non-cash, expected cash, variance, and pending
-  transaction warnings before closing.
+  sync/unpaid-legacy warnings before closing when applicable.
 - Branch dashboard states central-data freshness and does not imply streaming
   realtime.
 - Audit states explain login, role restriction, loading, and backend failure.

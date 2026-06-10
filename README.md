@@ -86,6 +86,10 @@ pnpm dev
 - `pnpm build`
 - `pnpm lint`
 - `pnpm typecheck`
+- `pnpm test:backend:vitest`
+- `pnpm test:e2e:web`
+- `pnpm test:e2e:electron`
+- `pnpm test:e2e`
 - `pnpm smoke:mvp`
 - `pnpm format`
 - `pnpm format:check`
@@ -99,6 +103,20 @@ pnpm smoke:mvp
 ```
 
 Smoke check ini memvalidasi health, login role utama, master data, sync bundle + idempotency, central dashboard, dan LLM insights sesuai scope terbaru. Detail release readiness dan backlog ekspansi ada di [Implementation Roadmap](docs/10-implementation-roadmap.md).
+
+Backend unit tests now run through Vitest:
+
+```bash
+pnpm test:backend:vitest
+```
+
+Renderer and Electron runtime E2E checks run through Playwright:
+
+```bash
+pnpm test:e2e:web
+pnpm test:e2e:electron
+pnpm test:e2e
+```
 
 ## CI/CD Home Server
 

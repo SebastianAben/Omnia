@@ -74,9 +74,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-[100dvh] overflow-x-hidden bg-surface text-ink">
-      <div className="flex min-h-[100dvh]">
-        <aside className="hidden w-[5.25rem] shrink-0 border-r border-line/80 bg-white/82 px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.85)] backdrop-blur-xl md:flex md:flex-col xl:w-72 xl:px-4">
+    <div className="h-[100dvh] overflow-hidden bg-surface text-ink">
+      <div className="flex h-full min-h-0">
+        <aside className="hidden h-full w-[5.25rem] shrink-0 overflow-hidden border-r border-line/80 bg-white/82 px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.85)] backdrop-blur-xl md:flex md:flex-col xl:w-72 xl:px-4">
           <div className="flex items-center gap-3 rounded-2xl bg-slate-950 p-3 text-white shadow-panel">
             <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-sm font-black text-slate-950">
               O
@@ -91,7 +91,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <nav className="mt-5 flex-1 space-y-1.5">
+          <nav className="mt-5 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
@@ -118,7 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          <div className="rounded-2xl border border-line/70 bg-white/74 p-2 shadow-lift xl:p-3">
+          <div className="shrink-0 rounded-2xl border border-line/70 bg-white/74 p-2 shadow-lift xl:p-3">
             <label className="mb-2 hidden text-xs font-semibold text-slate-500 xl:block">
               Role
             </label>
@@ -155,9 +155,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <StatusBar />
-          <main className="min-h-0 flex-1 overflow-auto px-4 py-4 md:px-6 lg:px-8">
+          <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 md:px-6 lg:px-8">
             <div className="mx-auto w-full max-w-[1500px]">{children}</div>
           </main>
         </div>

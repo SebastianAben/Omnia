@@ -241,8 +241,8 @@ export function ShiftPanel() {
                     Reconciliation preview
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    Local paid transactions only; pending transactions are
-                    called out before close.
+                    New POS checkouts are paid-only. Any older unpaid local
+                    transactions are called out before close.
                   </div>
                 </div>
                 {reconciliationPreview &&
@@ -287,10 +287,10 @@ export function ShiftPanel() {
 
               {reconciliationPreview?.pendingCount ? (
                 <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  {reconciliationPreview.pendingCount} pending transaction(s)
-                  totaling {formatCurrency(reconciliationPreview.pendingTotal)}
-                  are not included in expected cash. Review Sync Status during
-                  handoff.
+                  {reconciliationPreview.pendingCount} older unpaid local
+                  transaction(s) totaling{" "}
+                  {formatCurrency(reconciliationPreview.pendingTotal)} are not
+                  included in expected cash. Review Receipts during handoff.
                 </div>
               ) : null}
             </div>

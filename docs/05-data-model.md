@@ -37,9 +37,13 @@ Data model Omnia dibagi berdasarkan domain operasional. Implementasi aktual mema
   dan `quantity_after`; mutation yang membuat stok negatif ditolak.
 - Tidak ada retur/refund kompleks pada MVP.
 - Payment dicatat manual; belum ada payment gateway langsung.
+- POS checkout baru bersifat paid-only: transaksi kasir yang disimpan dari POS
+  harus memiliki pembayaran lunas dan `amount_received` yang mencukupi total.
+  Status payment pending hanya dipertahankan sebagai kompatibilitas data lama
+  atau schema non-POS legacy, bukan alur kasir aktif.
 - Close shift lokal menyimpan snapshot rekonsiliasi: total sales, cash,
-  non-cash, expected cash, closing cash, variance, dan pending transaction
-  warning metadata.
+  non-cash, expected cash, closing cash, variance, dan metadata peringatan
+  untuk transaksi lokal lama yang belum lunas jika masih ada.
 - Sync harus idempotent agar replay tidak menggandakan data.
 - LLM insight menyimpan severity, confidence, recommendation, reference data,
   provider/model metadata, prompt version, output validation status, dan status
