@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "python3 src/main.py",
-    "build": "python3 -m py_compile src/main.py",
-    "lint": "python3 -m py_compile src/main.py",
-    "typecheck": "python3 -m py_compile src/main.py"
+    "build": "python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('src/main.py').read_text(encoding='utf-8'))\"",
+    "lint": "python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('src/main.py').read_text(encoding='utf-8'))\"",
+    "typecheck": "python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('src/main.py').read_text(encoding='utf-8'))\""
   }
 }

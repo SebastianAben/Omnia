@@ -3,17 +3,54 @@
 @tailwind utilities;
 
 :root {
-  --surface: #f7f8fa;
+  --surface: #f4f6f8;
+  --surface-panel: #ffffff;
+  --surface-quiet: #eef2f5;
   --ink: #111827;
-  --muted: #64748b;
+  --muted: #667085;
+  --line: #d9e1e8;
+  --accent: #0f766e;
+  --accent-soft: #dff5ef;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background: var(--surface);
   color: var(--ink);
+  text-rendering: geometricPrecision;
+  font-variant-numeric: tabular-nums;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  content: "";
+  opacity: 0.45;
+  background-image:
+    radial-gradient(circle at 20% 12%, rgba(15, 118, 110, 0.08), transparent 28rem),
+    radial-gradient(circle at 82% 4%, rgba(100, 116, 139, 0.12), transparent 24rem),
+    linear-gradient(rgba(17, 24, 39, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 24, 39, 0.02) 1px, transparent 1px);
+  background-size: auto, auto, 36px 36px, 36px 36px;
+}
+
+::selection {
+  background: rgba(15, 118, 110, 0.18);
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
 }

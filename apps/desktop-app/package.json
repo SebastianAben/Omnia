@@ -8,7 +8,8 @@
     "dev:desktop": "pnpm build:electron && concurrently -k \"next dev -p 3000\" \"wait-on http://localhost:3000 && electron .\"",
     "build": "next build && pnpm build:electron",
     "build:electron": "tsc -p tsconfig.electron.json",
-    "localdb:init": "mkdir -p .omnia && sqlite3 .omnia/omnia-local.db < local-store/schema.sql",
+    "localdb:init": "powershell -ExecutionPolicy Bypass -File ./local-store/init-local-db.ps1",
+    "localdb:reset": "powershell -ExecutionPolicy Bypass -File ./local-store/init-local-db.ps1 -Reset",
     "start": "next start -p 3000",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit"

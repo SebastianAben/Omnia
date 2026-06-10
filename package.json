@@ -8,15 +8,23 @@
     "pnpm": ">=9.0.0"
   },
   "scripts": {
-    "dev": "pnpm -r --if-present dev",
+    "dev:full": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-full.ps1",
+    "dev": "pnpm -r --parallel --if-present dev",
     "build": "pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
+    "test:backend:vitest": "pnpm --filter @omnia/backend-api test:vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:electron": "playwright test --project=electron",
+    "test:e2e:web": "playwright test --project=web",
+    "smoke:mvp": "node ./scripts/smoke-mvp.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "prettier": "^3.6.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8"
   }
 }

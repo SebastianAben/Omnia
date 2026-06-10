@@ -2,14 +2,24 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
 import { AuthModule } from "./auth/auth.module";
+import { AiModule } from "./ai/ai.module";
+import { AuditModule } from "./audit/audit.module";
 import { BranchesModule } from "./branches/branches.module";
+import { CategoriesModule } from "./categories/categories.module";
 import { validateEnvironment } from "./config/env.validation";
 import { appConfig } from "./config/app.config";
+import { DashboardModule } from "./dashboard/dashboard.module";
 import { HealthModule } from "./health/health.module";
+import { InventoryModule } from "./inventory/inventory.module";
+import { MonitoringModule } from "./monitoring/monitoring.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProductsModule } from "./products/products.module";
 import { QueueModule } from "./queue/queue.module";
+import { RegistersModule } from "./registers/registers.module";
+import { ReportsModule } from "./reports/reports.module";
+import { RolesModule } from "./roles/roles.module";
 import { SyncModule } from "./sync/sync.module";
+import { UsersModule } from "./users/users.module";
 
 @Module({
   imports: [
@@ -20,11 +30,21 @@ import { SyncModule } from "./sync/sync.module";
     }),
     PrismaModule,
     QueueModule,
+    AiModule,
     HealthModule,
     AuthModule,
+    UsersModule,
+    RolesModule,
     BranchesModule,
+    RegistersModule,
+    CategoriesModule,
     ProductsModule,
+    InventoryModule,
     SyncModule,
+    ReportsModule,
+    DashboardModule,
+    AuditModule,
+    MonitoringModule,
   ],
 })
 export class AppModule {}

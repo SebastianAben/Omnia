@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "pnpm build && node dist/main.js",
+    "dev:watch": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.seed.json --noEmit",
+    "test:unit": "vitest run",
+    "test:vitest": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.seed.json --noEmit",
-    "db:migrate:local": "psql ${DATABASE_URL:-postgresql://omnia:omnia@localhost:55433/omnia} -f prisma/migrations/20260505023000_init/migration.sql",
+    "db:migrate:local": "prisma migrate deploy --schema prisma/schema.prisma",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
@@ -26,7 +29,8 @@
     "class-validator": "^0.14.2",
     "ioredis": "^5.10.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
