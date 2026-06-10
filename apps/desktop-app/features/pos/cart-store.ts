@@ -17,6 +17,7 @@ export interface CartActions {
   removeProduct: (productId: string) => void;
   setProductQuantity: (productId: string, quantity: number) => void;
   setLineDiscount: (productId: string, discountTotal: number) => void;
+  syncProducts: (products: PosProduct[]) => void;
   clearCart: () => void;
   setPaymentMethod: (method: CartState["selectedPaymentMethod"]) => void;
   setAmountReceived: (amount: number) => void;
@@ -104,6 +105,26 @@ export const useCartStore = create<CartStore>()(
           };
         }),
       })),
+    syncProducts: (products) =>
+      set((state) => {
+        const productById = new Map(
+          products.map((product) => [product.id, product]),
+        );
+
+        return {
+          lines: state.lines
+            .map((line) => {
+              const product = productById.get(line.product.id) ?? line.product;
+
+              return {
+                ...line,
+                product,
+                quantity: Math.min(line.quantity, product.stockOnHand),
+              };
+            })
+            .filter((line) => line.quantity > 0),
+        };
+      }),
     clearCart: () => set({ lines: [] }),
     setPaymentMethod: (selectedPaymentMethod) => set({ selectedPaymentMethod }),
     setAmountReceived: (amountReceived) =>

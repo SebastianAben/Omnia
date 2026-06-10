@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld("omniaDesktop", {
       ipcRenderer.invoke("omnia:local-store:replay-sync", input),
     saveShiftEvent: (input: unknown) =>
       ipcRenderer.invoke("omnia:local-store:save-shift-event", input),
+    closeShiftWithSync: (input: unknown) =>
+      ipcRenderer.invoke("omnia:local-store:close-shift-with-sync", input),
     getActiveShift: (input: unknown) =>
       ipcRenderer.invoke("omnia:local-store:get-active-shift", input),
     getShiftReconciliationPreview: (input: unknown) =>

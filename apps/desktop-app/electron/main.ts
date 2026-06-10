@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -30,6 +30,7 @@ const supportedReplayEventTypes = [
   "stock_movement.created",
 ] as const;
 const allowedExternalProtocols = new Set(["http:", "https:"]);
+const desktopStateFileName = "desktop-state.json";
 
 type SyncStatus = "pending" | "queued" | "synced" | "failed" | "conflict";
 type LocalSourceMode = "online" | "offline";
@@ -85,6 +86,14 @@ type ShiftReconciliationPreviewInput = {
   closingCashAmount: number;
 };
 
+type CloseShiftWithSyncInput = ShiftEventInput & {
+  action: "close";
+  replay: {
+    apiBaseUrl: string;
+    token?: string;
+  };
+};
+
 type StockAdjustmentInput = {
   branch: { id: string };
   user: { id: string };
@@ -127,6 +136,18 @@ type LocalShiftRow = {
   sync_status: SyncStatus;
 };
 
+type ReplayResult = {
+  attempted: number;
+  synced: number;
+  failed: number;
+  conflict: number;
+  deferred: number;
+};
+
+type DesktopState = {
+  lastRoute?: string;
+};
+
 type LocalInventoryBalanceRow = {
   quantity: number;
   minimum_quantity: number;
@@ -155,6 +176,8 @@ const sqlValue = (value: string | number | null | undefined) => {
 const getDesktopRoot = () => path.join(__dirname, "..");
 const getLocalDbPath = () =>
   path.join(app.getPath("userData"), "omnia-local.db");
+const getDesktopStatePath = () =>
+  path.join(app.getPath("userData"), desktopStateFileName);
 const getLocalSchemaPath = () => {
   const candidatePaths = [
     path.join(getDesktopRoot(), "local-store", "schema.sql"),
@@ -204,6 +227,35 @@ function ensureLocalStore() {
     stdio: ["pipe", "pipe", "pipe"],
   });
   localStoreReady = true;
+}
+
+function readDesktopState(): DesktopState {
+  try {
+    const raw = fs.readFileSync(getDesktopStatePath(), "utf8");
+    const parsed = JSON.parse(raw) as DesktopState;
+
+    return {
+      lastRoute: isSafeInternalRoute(parsed.lastRoute)
+        ? parsed.lastRoute
+        : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function writeDesktopState(state: DesktopState) {
+  fs.mkdirSync(path.dirname(getDesktopStatePath()), { recursive: true });
+  fs.writeFileSync(getDesktopStatePath(), JSON.stringify(state, null, 2));
+}
+
+function isSafeInternalRoute(route: unknown): route is string {
+  return (
+    typeof route === "string" &&
+    route.startsWith("/") &&
+    !route.startsWith("//") &&
+    !route.includes("\\")
+  );
 }
 
 function applyLocalStoreMigrations(dbPath: string) {
@@ -798,6 +850,74 @@ async function replayPendingSync(input: {
   return { attempted: pending.length, synced, failed, conflict, deferred };
 }
 
+function getBlockingSyncCount() {
+  const [{ count = 0 } = { count: 0 }] = querySql<{ count: number }>(
+    `SELECT COUNT(*) as count FROM sync_queue_local WHERE event_type IN (${supportedReplayEventTypes.map(sqlValue).join(", ")}) AND status IN ('pending', 'queued', 'failed', 'conflict');`,
+  );
+
+  return Number(count);
+}
+
+function assertReplaySucceeded(result: ReplayResult, context: string) {
+  if (result.failed > 0 || result.conflict > 0 || result.deferred > 0) {
+    throw new Error(
+      `${context} failed: ${result.attempted} attempted, ${result.synced} synced, ${result.failed} failed, ${result.conflict} conflict, ${result.deferred} deferred.`,
+    );
+  }
+}
+
+function getSyncQueueStatusByEventId(eventId: string) {
+  const [row] = querySql<{ status: SyncStatus }>(
+    `SELECT status FROM sync_queue_local WHERE event_id = ${sqlValue(eventId)} LIMIT 1;`,
+  );
+
+  return row?.status;
+}
+
+function rollbackFailedShiftClose(shiftId: string, eventId: string) {
+  runSql(
+    [
+      "BEGIN IMMEDIATE;",
+      `DELETE FROM sync_queue_local WHERE event_id = ${sqlValue(eventId)} AND status IN ('pending', 'queued', 'failed', 'conflict');`,
+      `UPDATE shifts_local SET closed_by_user_id = NULL, closed_at = NULL, closing_cash_amount = NULL, reconciliation_total_sales = NULL, reconciliation_cash_payments = NULL, reconciliation_non_cash_payments = NULL, reconciliation_expected_cash = NULL, reconciliation_variance = NULL, reconciliation_pending_count = NULL, reconciliation_pending_total = NULL, status = 'open', sync_status = 'synced' WHERE id = ${sqlValue(shiftId)};`,
+      "COMMIT;",
+    ].join("\n"),
+  );
+}
+
+async function closeShiftWithSync(input: CloseShiftWithSyncInput) {
+  if (!input.replay.token) {
+    throw new Error(
+      "Login session is required before closing shift with sync.",
+    );
+  }
+
+  const beforeCloseReplay = await replayPendingSync(input.replay);
+  assertReplaySucceeded(beforeCloseReplay, "Pre-close sync");
+  if (getBlockingSyncCount() > 0) {
+    throw new Error(
+      "Resolve pending or failed sync events before closing the cashier shift.",
+    );
+  }
+
+  const closeResult = saveShiftEvent(input);
+  const closeReplay = await replayPendingSync(input.replay);
+  const closeStatus = getSyncQueueStatusByEventId(closeResult.eventId);
+
+  if (closeStatus !== "synced") {
+    rollbackFailedShiftClose(closeResult.shiftId, closeResult.eventId);
+    assertReplaySucceeded(closeReplay, "Close shift sync");
+    throw new Error(
+      "Close shift sync did not receive central acknowledgement.",
+    );
+  }
+
+  return {
+    ...closeResult,
+    replay: closeReplay,
+  };
+}
+
 function saveShiftEvent(input: ShiftEventInput) {
   assertValidShiftEventInput(input);
   const occurredAt = new Date().toISOString();
@@ -1021,6 +1141,22 @@ function getLocalInventoryBalance(branchId: string, productId: string) {
     : null;
 }
 
+function getAnyOpenShift() {
+  const [shift] = querySql<LocalShiftRow>(
+    "SELECT * FROM shifts_local WHERE status = 'open' ORDER BY opened_at DESC LIMIT 1;",
+  );
+
+  return shift
+    ? {
+        id: shift.id,
+        branchId: shift.branch_id,
+        registerId: shift.register_id,
+        openedAt: shift.opened_at,
+        openingCashAmount: Number(shift.opening_cash_amount ?? 0),
+      }
+    : null;
+}
+
 function saveStockAdjustment(input: StockAdjustmentInput) {
   assertValidStockAdjustmentInput(input);
   const occurredAt = new Date().toISOString();
@@ -1198,6 +1334,9 @@ function registerLocalStoreHandlers() {
   ipcMain.handle("omnia:local-store:save-shift-event", (_event, input) =>
     saveShiftEvent(input as ShiftEventInput),
   );
+  ipcMain.handle("omnia:local-store:close-shift-with-sync", (_event, input) =>
+    closeShiftWithSync(input as CloseShiftWithSyncInput),
+  );
   ipcMain.handle(
     "omnia:local-store:get-active-shift",
     (_event, input: { branchId: string; registerId: string }) =>
@@ -1211,6 +1350,7 @@ function registerLocalStoreHandlers() {
 }
 
 function createMainWindow() {
+  const desktopState = readDesktopState();
   const mainWindow = new BrowserWindow({
     width: 1366,
     height: 768,
@@ -1227,6 +1367,7 @@ function createMainWindow() {
       allowRunningInsecureContent: false,
     },
   });
+  let closeConfirmed = false;
 
   mainWindow.webContents.session.webRequest.onHeadersReceived(
     (details, callback) => {
@@ -1255,11 +1396,78 @@ function createMainWindow() {
     return { action: "deny" };
   });
 
+  mainWindow.on("close", (event) => {
+    if (closeConfirmed) {
+      return;
+    }
+
+    event.preventDefault();
+    void handleMainWindowClose(mainWindow).then((shouldClose) => {
+      if (!shouldClose || mainWindow.isDestroyed()) {
+        return;
+      }
+
+      closeConfirmed = true;
+      mainWindow.close();
+    });
+  });
+
   if (isDev) {
-    void mainWindow.loadURL(devServerUrl);
+    void mainWindow.loadURL(
+      new URL(desktopState.lastRoute ?? "/", devServerUrl).toString(),
+    );
   } else {
-    void mainWindow.loadFile(path.join(__dirname, "../out/index.html"));
+    void loadStaticRoute(mainWindow, desktopState.lastRoute);
   }
+}
+
+async function handleMainWindowClose(mainWindow: BrowserWindow) {
+  await persistCurrentRoute(mainWindow);
+  const openShift = getAnyOpenShift();
+
+  if (!openShift) {
+    return true;
+  }
+
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: "warning",
+    buttons: ["Kembali ke Omnia", "Tutup aplikasi"],
+    defaultId: 0,
+    cancelId: 0,
+    title: "Shift masih terbuka",
+    message: "Shift kasir masih terbuka.",
+    detail:
+      "Ingat untuk menutup shift setelah selesai operasional. Data lokal dan perubahan yang belum sync tetap tersimpan di perangkat ini.",
+    noLink: true,
+  });
+
+  return result.response === 1;
+}
+
+async function persistCurrentRoute(mainWindow: BrowserWindow) {
+  try {
+    const route = await mainWindow.webContents.executeJavaScript(
+      "window.location.pathname",
+      true,
+    );
+
+    writeDesktopState({
+      lastRoute: isSafeInternalRoute(route) ? route : "/",
+    });
+  } catch {
+    writeDesktopState({ lastRoute: "/" });
+  }
+}
+
+function loadStaticRoute(mainWindow: BrowserWindow, route?: string) {
+  const safeRoute = route && route !== "/" ? route : "/index.html";
+  const routeFile =
+    safeRoute === "/index.html"
+      ? path.join(__dirname, "../out/index.html")
+      : path.join(__dirname, "../out", safeRoute, "index.html");
+
+  const fallbackFile = path.join(__dirname, "../out/index.html");
+  void mainWindow.loadFile(fs.existsSync(routeFile) ? routeFile : fallbackFile);
 }
 
 function registerAuthSessionHandlers() {

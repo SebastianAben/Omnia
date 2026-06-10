@@ -124,6 +124,17 @@ type LocalStoreBridge = {
     shiftId: string;
     eventId: string;
   }>;
+  closeShiftWithSync: (input: unknown) => Promise<{
+    shiftId: string;
+    eventId: string;
+    replay: {
+      attempted: number;
+      synced: number;
+      failed: number;
+      conflict: number;
+      deferred: number;
+    };
+  }>;
   getActiveShift: (input: {
     branchId: string;
     registerId: string;
@@ -239,6 +250,31 @@ export async function saveShiftEvent(input: {
   return requireLocalStore().saveShiftEvent({
     ...input,
     sourceMode: getLocalSourceMode(),
+  });
+}
+
+export async function closeShiftWithSync(input: {
+  branch: BranchContext;
+  register: RegisterContext;
+  user: SessionUser;
+  shiftId: string;
+  closingCashAmount: number;
+  reconciliation?: LocalShiftReconciliationPreview | null;
+  token?: string;
+}) {
+  return requireLocalStore().closeShiftWithSync({
+    branch: input.branch,
+    register: input.register,
+    user: input.user,
+    action: "close",
+    shiftId: input.shiftId,
+    closingCashAmount: input.closingCashAmount,
+    reconciliation: input.reconciliation ?? null,
+    sourceMode: getLocalSourceMode(),
+    replay: {
+      apiBaseUrl: getApiBaseUrl(),
+      token: input.token,
+    },
   });
 }
 

@@ -42,9 +42,13 @@ const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
 ];
 
 const catalogResultLimit = 24;
+const catalogPageSize = 12;
+const cartPageSize = 8;
 
 export function PosWorkspace() {
   const [query, setQuery] = useState("");
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [cartPage, setCartPage] = useState(1);
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const [catalogMessage, setCatalogMessage] = useState<string | null>(null);
   const [isCheckingOut, setCheckingOut] = useState(false);
@@ -62,6 +66,7 @@ export function PosWorkspace() {
   const removeProduct = useCartStore((state) => state.removeProduct);
   const setProductQuantity = useCartStore((state) => state.setProductQuantity);
   const clearCart = useCartStore((state) => state.clearCart);
+  const syncProducts = useCartStore((state) => state.syncProducts);
   const setLineDiscount = useCartStore((state) => state.setLineDiscount);
   const selectedPaymentMethod = useCartStore(
     (state) => state.selectedPaymentMethod,
@@ -87,10 +92,18 @@ export function PosWorkspace() {
     [products, query],
   );
   const visibleProducts = catalogResult.items;
+  const catalogPageCount = Math.max(
+    1,
+    Math.ceil(visibleProducts.length / catalogPageSize),
+  );
+  const pagedProducts = visibleProducts.slice(
+    (catalogPage - 1) * catalogPageSize,
+    catalogPage * catalogPageSize,
+  );
   const visibleStockNotifications = useMemo(
     () =>
       buildStockNotifications(
-        visibleProducts.map((product) => ({
+        pagedProducts.map((product) => ({
           id: product.id,
           sku: product.sku,
           name: product.name,
@@ -100,14 +113,35 @@ export function PosWorkspace() {
           source: "local",
         })),
       ),
-    [branch.name, visibleProducts],
+    [branch.name, pagedProducts],
   );
   const visibleStockSummary = useMemo(
     () => summarizeStockNotifications(visibleStockNotifications),
     [visibleStockNotifications],
   );
   const totals = useMemo(() => calculateCartTotals(lines), [lines]);
+  const cartPageCount = Math.max(1, Math.ceil(lines.length / cartPageSize));
+  const pagedLines = lines.slice(
+    (cartPage - 1) * cartPageSize,
+    cartPage * cartPageSize,
+  );
   const canCheckout = shiftStatus === "open" && Boolean(activeShiftId);
+
+  useEffect(() => {
+    syncProducts(products);
+  }, [products, syncProducts]);
+
+  useEffect(() => {
+    setCatalogPage(1);
+  }, [query]);
+
+  useEffect(() => {
+    setCatalogPage((page) => Math.min(page, catalogPageCount));
+  }, [catalogPageCount]);
+
+  useEffect(() => {
+    setCartPage((page) => Math.min(page, cartPageCount));
+  }, [cartPageCount]);
 
   const handleCheckout = useCallback(async () => {
     if (!canCheckout) {
@@ -143,6 +177,7 @@ export function PosWorkspace() {
           .length,
       );
       clearCart();
+      await catalogQuery.refetch();
       setCheckoutMessage(
         `${result.transactionNo} saved locally. Review Sync Status when ready to replay event ${result.eventId}.`,
       );
@@ -150,7 +185,7 @@ export function PosWorkspace() {
       setCheckoutMessage(
         error instanceof Error
           ? error.message
-          : "Transaksi gagal disimpan secara lokal.",
+          : "Transaction failed to save locally.",
       );
     } finally {
       setCheckingOut(false);
@@ -160,6 +195,7 @@ export function PosWorkspace() {
     amountReceived,
     branch,
     canCheckout,
+    catalogQuery,
     clearCart,
     lines,
     register,
@@ -174,9 +210,7 @@ export function PosWorkspace() {
 
     if (!exactMatch) {
       setCatalogMessage(
-        query.trim()
-          ? "Tidak ada satu barcode atau SKU yang cocok persis."
-          : null,
+        query.trim() ? "No exact barcode or SKU match was found." : null,
       );
       return;
     }
@@ -191,14 +225,14 @@ export function PosWorkspace() {
 
     if (existingQuantity >= exactMatch.stockOnHand) {
       setCatalogMessage(
-        `${exactMatch.name} sudah mencapai stok tersedia (${exactMatch.stockOnHand}).`,
+        `${exactMatch.name} has reached available stock (${exactMatch.stockOnHand}).`,
       );
       return;
     }
 
     addProduct(exactMatch);
     setQuery("");
-    setCatalogMessage(`${exactMatch.name} ditambahkan ke cart.`);
+    setCatalogMessage(`${exactMatch.name} added to cart.`);
     window.requestAnimationFrame(() => searchInputRef.current?.focus());
   }, [addProduct, lines, products, query]);
 
@@ -216,7 +250,7 @@ export function PosWorkspace() {
       return;
     }
 
-    if (window.confirm("Kosongkan cart saat ini?")) {
+    if (window.confirm("Clear the current cart?")) {
       clearCart();
       setCheckoutMessage(null);
       searchInputRef.current?.focus();
@@ -288,11 +322,11 @@ export function PosWorkspace() {
                 </Badge>
               </div>
               <h1 className="mt-4 max-w-5xl text-3xl font-semibold leading-none tracking-[-0.055em] text-slate-950 md:text-5xl">
-                Transaksi POS
+                POS Transaction
               </h1>
               <p className="mt-3 max-w-[62ch] text-sm leading-6 text-slate-600">
-                Cari produk, atur jumlah, pilih metode pembayaran, lalu simpan
-                transaksi lunas ke antrean lokal.
+                Search products, adjust quantities, choose payment, then save a
+                paid transaction to the local queue.
               </p>
             </div>
           </div>
@@ -301,7 +335,7 @@ export function PosWorkspace() {
         <div className="p-5 md:p-6">
           <label className="relative block">
             <span className="mb-2 block text-sm font-semibold text-slate-700">
-              Cari produk
+              Search Products
             </span>
             <Search
               aria-hidden="true"
@@ -312,7 +346,7 @@ export function PosWorkspace() {
               className="h-12 w-full rounded-2xl border border-line bg-white pl-11 pr-4 text-base text-slate-950 outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-200/70"
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleSearchKeyDown}
-              placeholder="Scan barcode, SKU, atau nama produk"
+              placeholder="Scan barcode, SKU, or product name"
               ref={searchInputRef}
               value={query}
             />
@@ -331,26 +365,26 @@ export function PosWorkspace() {
               ))}
             </div>
           ) : token && catalogQuery.isError ? (
-            <CatalogState message="Katalog cabang tidak tersedia. Checkout dinonaktifkan sampai master data valid berhasil dimuat." />
+            <CatalogState message="Branch catalog is unavailable. Checkout is disabled until valid master data loads." />
           ) : visibleProducts.length === 0 ? (
             <div className="mt-5 rounded-3xl border border-dashed border-line bg-slate-50 px-5 py-12 text-center">
               <div className="text-base font-semibold text-slate-950">
-                Produk tidak ditemukan
+                Product not found
               </div>
               <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-600">
-                Coba SKU, barcode, kategori, atau nama produk lain.
+                Try another SKU, barcode, category, or product name.
               </p>
             </div>
           ) : (
             <>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
                 <span>
-                  Menampilkan {visibleProducts.length} dari{" "}
-                  {catalogResult.totalCount} produk.
+                  Showing {pagedProducts.length} of {catalogResult.totalCount}{" "}
+                  products.
                 </span>
                 {catalogResult.hasMore ? (
                   <span className="font-medium text-slate-800">
-                    Persempit pencarian untuk hasil lainnya.
+                    Narrow the search to see more results.
                   </span>
                 ) : null}
               </div>
@@ -358,13 +392,13 @@ export function PosWorkspace() {
               {visibleStockSummary.total > 0 ? (
                 <InlineFeedback className="mt-3" tone="warning">
                   {visibleStockSummary.outOfStock} out of stock,{" "}
-                  {visibleStockSummary.lowStock} low stock dalam hasil yang
-                  tampil.
+                  {visibleStockSummary.lowStock} low stock in the visible
+                  results.
                 </InlineFeedback>
               ) : null}
 
               <div className="mt-3 grid-flow-dense grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-                {visibleProducts.map((product) => {
+                {pagedProducts.map((product) => {
                   const stockStatus = getStockNotificationType({
                     stockOnHand: product.stockOnHand,
                     minimumQuantity: product.minimumQuantity,
@@ -409,7 +443,7 @@ export function PosWorkspace() {
                             {formatRupiah(product.price)}
                           </div>
                           <div className="mt-1 truncate text-xs text-slate-500">
-                            Stok {product.stockOnHand} / min{" "}
+                            Stock {product.stockOnHand} / min{" "}
                             {product.minimumQuantity}
                           </div>
                         </div>
@@ -424,12 +458,41 @@ export function PosWorkspace() {
                           variant="secondary"
                         >
                           <Plus size={16} aria-hidden="true" />
-                          Tambah
+                          Add
                         </Button>
                       </div>
                     </article>
                   );
                 })}
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-3 text-sm text-slate-600">
+                <span>
+                  Page {catalogPage} of {catalogPageCount}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={catalogPage <= 1}
+                    onClick={() =>
+                      setCatalogPage((page) => Math.max(1, page - 1))
+                    }
+                    type="button"
+                    variant="secondary"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    disabled={catalogPage >= catalogPageCount}
+                    onClick={() =>
+                      setCatalogPage((page) =>
+                        Math.min(catalogPageCount, page + 1),
+                      )
+                    }
+                    type="button"
+                    variant="secondary"
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             </>
           )}
@@ -450,11 +513,11 @@ export function PosWorkspace() {
             {totals.itemCount} items
           </Badge>
           <button
-            aria-label="Kosongkan cart"
+            aria-label="Clear cart"
             className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={lines.length === 0}
             onClick={handleClearCart}
-            title="Kosongkan cart"
+            title="Clear cart"
             type="button"
           >
             <Trash2 size={16} />
@@ -465,14 +528,14 @@ export function PosWorkspace() {
           {lines.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-line bg-slate-50 px-4 py-10 text-center">
               <div className="text-sm font-semibold text-slate-950">
-                Cart kosong
+                Cart is empty
               </div>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Tambahkan produk dari katalog atau scan barcode.
+                Add products from the catalog or scan a barcode.
               </p>
             </div>
           ) : (
-            lines.map((line) => (
+            pagedLines.map((line) => (
               <div
                 className="rounded-2xl border border-line/80 bg-white p-3 shadow-[0_10px_24px_-22px_rgba(15,23,42,0.45)]"
                 key={line.product.id}
@@ -525,7 +588,7 @@ export function PosWorkspace() {
                     className="sr-only"
                     htmlFor={`quantity-${line.product.id}`}
                   >
-                    Jumlah {line.product.name}
+                    Quantity {line.product.name}
                   </label>
                   <input
                     className="h-9 w-16 rounded-xl border border-line bg-white px-2 text-center font-mono text-sm font-semibold text-slate-950 outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-200/70"
@@ -549,7 +612,7 @@ export function PosWorkspace() {
                   </div>
                 </div>
                 <label className="mt-3 grid gap-1.5 text-xs font-semibold text-slate-600">
-                  Diskon item
+                  Item discount
                   <input
                     className="h-9 rounded-xl border border-line bg-white px-3 font-mono text-sm outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-200/70"
                     min={0}
@@ -568,6 +631,34 @@ export function PosWorkspace() {
           )}
         </div>
 
+        {lines.length > cartPageSize ? (
+          <div className="mt-3 flex items-center justify-between gap-3 text-sm text-slate-600">
+            <span>
+              Cart page {cartPage} of {cartPageCount}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                disabled={cartPage <= 1}
+                onClick={() => setCartPage((page) => Math.max(1, page - 1))}
+                type="button"
+                variant="secondary"
+              >
+                Previous
+              </Button>
+              <Button
+                disabled={cartPage >= cartPageCount}
+                onClick={() =>
+                  setCartPage((page) => Math.min(cartPageCount, page + 1))
+                }
+                type="button"
+                variant="secondary"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="mt-5 rounded-3xl bg-slate-950 p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
           <div className="grid gap-2 text-sm">
             <ReceiptRow
@@ -578,10 +669,7 @@ export function PosWorkspace() {
               label="Discount"
               value={formatRupiah(totals.discountTotal)}
             />
-            <ReceiptRow
-              label="Pajak 11%"
-              value={formatRupiah(totals.taxTotal)}
-            />
+            <ReceiptRow label="Tax 11%" value={formatRupiah(totals.taxTotal)} />
           </div>
           <div className="mt-4 border-t border-white/12 pt-4">
             <div className="flex justify-between gap-3">
@@ -610,7 +698,7 @@ export function PosWorkspace() {
         </div>
 
         <label className="mt-4 grid gap-1.5 text-sm font-semibold text-slate-700">
-          Uang diterima
+          Amount received
           <input
             className="h-11 rounded-2xl border border-line bg-white px-3 font-mono text-sm outline-none transition focus:border-slate-500 focus:ring-4 focus:ring-slate-200/70"
             min={0}
@@ -623,7 +711,7 @@ export function PosWorkspace() {
         </label>
 
         <div className="mt-3 flex justify-between text-sm">
-          <span className="text-slate-600">Kembalian</span>
+          <span className="text-slate-600">Change</span>
           <span className="font-mono font-semibold text-slate-950">
             {formatRupiah(Math.max(amountReceived - totals.grandTotal, 0))}
           </span>
@@ -635,7 +723,7 @@ export function PosWorkspace() {
           onClick={handleCheckout}
           type="button"
         >
-          {isCheckingOut ? "Menyimpan..." : "Simpan transaksi"}
+          {isCheckingOut ? "Saving..." : "Save Transaction"}
         </Button>
 
         {!canCheckout ? (
