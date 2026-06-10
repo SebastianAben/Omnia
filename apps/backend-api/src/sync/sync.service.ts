@@ -24,6 +24,7 @@ const paymentStatusSchema = z.enum([
 ]);
 
 const moneySchema = z.number().finite().nonnegative();
+const signedMoneySchema = z.number().finite();
 const quantitySchema = z.number().finite();
 
 const syncBundleSchema = z.object({
@@ -138,7 +139,7 @@ const shiftEventSchema = z.object({
           opening_cash: moneySchema,
           expected_cash: moneySchema,
           closing_cash: moneySchema,
-          variance: moneySchema,
+          variance: signedMoneySchema,
           pending_count: z.coerce.number().int().nonnegative(),
           pending_total: moneySchema,
         })
