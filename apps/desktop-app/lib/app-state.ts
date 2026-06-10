@@ -5,6 +5,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 
 export type OmniaRole = "cashier" | "supervisor" | "hq_admin" | "executive";
 export type ShiftStatus = "open" | "closed";
+export type SessionMode = "demo" | "password";
 
 export type SessionUser = {
   id: string;
@@ -30,6 +31,7 @@ export interface AppState {
   branch: BranchContext;
   register: RegisterContext;
   user: SessionUser;
+  sessionMode: SessionMode;
   token?: string;
   activeShiftId?: string;
   shiftStatus: ShiftStatus;
@@ -50,6 +52,7 @@ export interface AppActions {
     branch?: BranchContext;
     register?: RegisterContext;
     activeShiftId?: string;
+    sessionMode?: SessionMode;
   }) => void;
 }
 
@@ -94,14 +97,6 @@ export const defaultUser: SessionUser = {
   branchId: defaultBranch.id,
 };
 
-export const createDemoSession = (role: OmniaRole = "cashier") => ({
-  user: {
-    ...defaultUser,
-    role,
-  },
-  branch: defaultBranch,
-});
-
 export const useAppState = create<AppStore>()(
   subscribeWithSelector((set) => ({
     role: defaultUser.role,
@@ -111,6 +106,7 @@ export const useAppState = create<AppStore>()(
       name: "Register 01",
     },
     user: defaultUser,
+    sessionMode: "demo",
     token: undefined,
     activeShiftId: undefined,
     shiftStatus: "closed",
@@ -129,10 +125,18 @@ export const useAppState = create<AppStore>()(
     setShiftStatus: (shiftStatus) => set({ shiftStatus }),
     setActiveShiftId: (activeShiftId) => set({ activeShiftId }),
     setToken: (token) => set({ token }),
-    setSession: ({ token, user, branch, register, activeShiftId }) =>
+    setSession: ({
+      token,
+      user,
+      branch,
+      register,
+      activeShiftId,
+      sessionMode = "password",
+    }) =>
       set((state) => ({
         token,
         user,
+        sessionMode,
         role: user.role,
         branch: branch ?? state.branch,
         register: register ?? state.register,

@@ -145,9 +145,6 @@ export class GeminiLlmClient implements LlmClient {
             generationConfig: {
               temperature: 0.2,
               responseMimeType: "application/json",
-              responseSchema: buildGeminiStructuredOutputSchema(
-                input.config.llmMaxInsights,
-              ),
             },
           }),
           signal: controller.signal,
@@ -746,81 +743,13 @@ function buildPrompt(context: LlmGenerationContext, maxInsights: number) {
     "Use only the supplied central database context. Do not invent product IDs, branch IDs, stock, sales, or operational events.",
     "Never request or claim to perform mutations such as changing stock, prices, orders, payments, sync state, or master data.",
     `Return JSON only. Generate at most ${maxInsights} insights.`,
+    "Use this exact top-level shape: {\"insights\":[{\"insight_type\":\"low_stock_alert\",\"title\":\"...\",\"summary\":\"...\",\"recommendation\":\"...\",\"role_variants\":{\"executive\":{\"title\":\"...\",\"summary\":\"...\",\"recommendation\":\"...\"},\"hq_admin\":{\"title\":\"...\",\"summary\":\"...\",\"recommendation\":\"...\"}},\"severity\":\"warning\",\"confidence_score\":0.8,\"branch_id\":null,\"product_id\":null,\"reference_data\":{},\"advisory_only\":true,\"prohibited_action_requested\":false}]}",
     "Each insight must include role_variants.executive and role_variants.hq_admin.",
     "The executive variant must be short, strategic, and focused on business risk or impact.",
     "The hq_admin variant must be operational, include relevant references, and recommend manual follow-up.",
     "",
     `Context JSON:\n${JSON.stringify(context)}`,
   ].join("\n");
-}
-
-function buildGeminiStructuredOutputSchema(maxInsights: number) {
-  return {
-    type: "object",
-    properties: {
-      insights: {
-        type: "array",
-        minItems: 1,
-        maxItems: maxInsights,
-        items: {
-          type: "object",
-          properties: {
-            insight_type: { type: "string" },
-            title: { type: "string" },
-            summary: { type: "string" },
-            recommendation: { type: "string" },
-            role_variants: {
-              type: "object",
-              properties: {
-                executive: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    summary: { type: "string" },
-                    recommendation: { type: "string" },
-                  },
-                  required: ["title", "summary", "recommendation"],
-                },
-                hq_admin: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    summary: { type: "string" },
-                    recommendation: { type: "string" },
-                  },
-                  required: ["title", "summary", "recommendation"],
-                },
-              },
-              required: ["executive", "hq_admin"],
-            },
-            severity: {
-              type: "string",
-              enum: ["info", "warning", "critical"],
-            },
-            confidence_score: { type: "number" },
-            branch_id: { type: "string", nullable: true },
-            product_id: { type: "string", nullable: true },
-            reference_data: { type: "object" },
-            advisory_only: { type: "boolean" },
-            prohibited_action_requested: { type: "boolean" },
-          },
-          required: [
-            "insight_type",
-            "title",
-            "summary",
-            "recommendation",
-            "role_variants",
-            "severity",
-            "confidence_score",
-            "reference_data",
-            "advisory_only",
-            "prohibited_action_requested",
-          ],
-        },
-      },
-    },
-    required: ["insights"],
-  };
 }
 
 function selectRoleWording(referenceData: Prisma.JsonValue, roleCode: string) {

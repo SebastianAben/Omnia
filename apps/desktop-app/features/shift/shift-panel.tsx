@@ -36,8 +36,9 @@ export function ShiftPanel() {
     try {
       const queue = await listLocalSyncQueue();
       setPendingCount(
-        queue.filter((item) => ["pending", "queued"].includes(item.status))
-          .length,
+        queue.filter((item) =>
+          ["pending", "queued", "failed", "conflict"].includes(item.status),
+        ).length,
       );
     } catch {
       setLocalStoreReady(false);

@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { roleLabels, type OmniaRole, useAppState } from "@/lib/app-state";
 import { StatusBar } from "@/components/status-bar";
-import { logoutSession } from "@/features/auth/auth-service";
+import { logoutSession, switchDemoRole } from "@/features/auth/auth-service";
 
 const navByRole: Record<
   OmniaRole,
@@ -57,9 +57,12 @@ const navByRole: Record<
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { role, setRole, token } = useAppState();
+  const { role, sessionMode, setSession, token } = useAppState();
   const [isSigningOut, setSigningOut] = useState(false);
+  const [switchingRole, setSwitchingRole] = useState<OmniaRole | null>(null);
+  const [roleSwitchError, setRoleSwitchError] = useState<string | null>(null);
   const navItems = navByRole[role];
+  const isDemoSession = sessionMode === "demo" && Boolean(token);
 
   const signOut = async () => {
     setSigningOut(true);
@@ -70,6 +73,32 @@ export function AppShell({ children }: { children: ReactNode }) {
     } finally {
       router.replace("/login");
       setSigningOut(false);
+    }
+  };
+
+  const switchDemoSessionRole = async (nextRole: OmniaRole) => {
+    if (nextRole === role || switchingRole) {
+      return;
+    }
+
+    setSwitchingRole(nextRole);
+    setRoleSwitchError(null);
+
+    try {
+      const session = await switchDemoRole(nextRole);
+      setSession(session);
+
+      const nextNavItems = navByRole[session.user.role];
+      if (!nextNavItems.some((item) => item.href === pathname)) {
+        router.replace(nextNavItems[0]?.href ?? "/pos");
+      }
+    } catch {
+      setRoleSwitchError(
+        "Tidak bisa mengganti role demo. Cek koneksi backend.",
+      );
+      router.replace("/login");
+    } finally {
+      setSwitchingRole(null);
     }
   };
 
@@ -123,20 +152,33 @@ export function AppShell({ children }: { children: ReactNode }) {
               Role
             </label>
             <div className="grid gap-1.5">
-              {(Object.keys(roleLabels) as OmniaRole[]).map((item) => (
-                <Button
-                  className="h-8 justify-center px-2 text-xs xl:justify-start"
-                  key={item}
-                  onClick={() => setRole(item)}
-                  type="button"
-                  variant={role === item ? "primary" : "ghost"}
-                >
-                  <span className="xl:hidden">
-                    {roleLabels[item].slice(0, 2)}
-                  </span>
-                  <span className="hidden xl:inline">{roleLabels[item]}</span>
-                </Button>
-              ))}
+              {isDemoSession ? (
+                (Object.keys(roleLabels) as OmniaRole[]).map((item) => (
+                  <Button
+                    className="h-8 justify-center px-2 text-xs xl:justify-start"
+                    disabled={Boolean(switchingRole)}
+                    key={item}
+                    onClick={() => void switchDemoSessionRole(item)}
+                    type="button"
+                    variant={role === item ? "primary" : "ghost"}
+                  >
+                    <span className="xl:hidden">
+                      {switchingRole === item
+                        ? "..."
+                        : roleLabels[item].slice(0, 2)}
+                    </span>
+                    <span className="hidden xl:inline">
+                      {switchingRole === item
+                        ? "Switching..."
+                        : roleLabels[item]}
+                    </span>
+                  </Button>
+                ))
+              ) : (
+                <div className="flex justify-center xl:justify-start">
+                  <Badge>{roleLabels[role]}</Badge>
+                </div>
+              )}
               {token ? (
                 <Button
                   className="h-8 justify-center px-2 text-xs xl:justify-start"
@@ -152,6 +194,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Button>
               ) : null}
             </div>
+            {roleSwitchError ? (
+              <p className="mt-2 hidden text-xs leading-5 text-red-600 xl:block">
+                {roleSwitchError}
+              </p>
+            ) : null}
           </div>
         </aside>
 
