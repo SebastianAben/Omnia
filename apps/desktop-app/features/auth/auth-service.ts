@@ -7,7 +7,9 @@ import {
   roleFromApi,
   useAppState,
   type BranchContext,
+  type OmniaRole,
   type RegisterContext,
+  type SessionMode,
   type SessionUser,
 } from "@/lib/app-state";
 import { getLocalActiveShift } from "@/features/local-first/local-checkout-repository";
@@ -35,6 +37,7 @@ export type LoginResult = {
   branch?: BranchContext;
   register?: RegisterContext;
   activeShiftId?: string;
+  sessionMode: SessionMode;
 };
 
 const sessionTokenKey = "omnia.auth.token";
@@ -53,10 +56,19 @@ type AuthSessionBridge = {
 let memoryTokenPair: TokenPair | undefined;
 let refreshPromise: Promise<string | undefined> | undefined;
 
+const demoPassword = "password123";
+const demoRoleCredentials: Record<OmniaRole, { username: string }> = {
+  cashier: { username: "demo.cashier" },
+  supervisor: { username: "demo.supervisor" },
+  hq_admin: { username: "demo.admin" },
+  executive: { username: "demo.analyst" },
+};
+
 const mapSession = (
   data: LoginResponse,
   register?: RegisterContext,
   activeShiftId?: string,
+  sessionMode: SessionMode = "password",
 ): LoginResult => ({
   token: data.token,
   user: {
@@ -75,6 +87,7 @@ const mapSession = (
     : undefined,
   register,
   activeShiftId,
+  sessionMode,
 });
 
 type ApiRegister = {
@@ -151,7 +164,9 @@ function readBrowserTokenPair(): TokenPair | undefined {
   const accessToken = window.localStorage.getItem(sessionTokenKey);
   const refreshToken = window.localStorage.getItem(refreshTokenKey);
 
-  return accessToken && refreshToken ? { accessToken, refreshToken } : undefined;
+  return accessToken && refreshToken
+    ? { accessToken, refreshToken }
+    : undefined;
 }
 
 function clearBrowserTokenPair() {
@@ -172,6 +187,37 @@ export async function loginWithPassword(input: {
   password: string;
   deviceId: string;
 }): Promise<LoginResult> {
+  return loginWithCredentials({
+    ...input,
+    sessionMode: "password",
+  });
+}
+
+export async function loginWithDemoRole(
+  role: OmniaRole = "cashier",
+  deviceId = "omnia-desktop-register-01",
+): Promise<LoginResult> {
+  const credentials = demoRoleCredentials[role];
+
+  return loginWithCredentials({
+    username: credentials.username,
+    password: demoPassword,
+    deviceId,
+    sessionMode: "demo",
+  });
+}
+
+export async function switchDemoRole(role: OmniaRole): Promise<LoginResult> {
+  await logoutSession();
+  return loginWithDemoRole(role);
+}
+
+async function loginWithCredentials(input: {
+  username: string;
+  password: string;
+  deviceId: string;
+  sessionMode: SessionMode;
+}): Promise<LoginResult> {
   const data = await apiFetch<LoginResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify({
@@ -190,7 +236,7 @@ export async function loginWithPassword(input: {
     data.user.branch_id,
     register?.id,
   );
-  const session = mapSession(data, register, activeShiftId);
+  const session = mapSession(data, register, activeShiftId, input.sessionMode);
   await saveTokenPair(data);
   return session;
 }
@@ -214,10 +260,7 @@ export async function restoreSession(): Promise<LoginResult | null> {
 
     tokenPair = await readTokenPair();
     const activeToken = tokenPair?.accessToken ?? token;
-    const register = await resolveRegister(
-      data.user.branch_id,
-      activeToken,
-    );
+    const register = await resolveRegister(data.user.branch_id, activeToken);
     const activeShiftId = await resolveActiveShiftId(
       data.user.branch_id,
       register?.id,

@@ -4,9 +4,9 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@omnia/ui";
 
-import { createDemoSession, useAppState } from "@/lib/app-state";
+import { useAppState } from "@/lib/app-state";
 import { ApiClientError } from "@/lib/api-client";
-import { loginWithPassword } from "./auth-service";
+import { loginWithDemoRole, loginWithPassword } from "./auth-service";
 
 export function LoginForm() {
   const router = useRouter();
@@ -16,9 +16,23 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setSubmitting] = useState(false);
 
-  const continueWithDemo = () => {
-    setSession(createDemoSession());
-    router.push("/pos");
+  const continueWithDemo = async () => {
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const session = await loginWithDemoRole();
+      setSession(session);
+      router.push("/pos");
+    } catch (caught) {
+      const message =
+        caught instanceof ApiClientError
+          ? caught.message
+          : "Mode demo membutuhkan backend aktif dan akun seed demo.";
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
