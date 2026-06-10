@@ -32,8 +32,8 @@ export class BranchesService {
       where: {
         branchId,
         isActive: true,
-        effectiveFrom: { lte: now },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+        OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: now } }],
+        AND: [{ OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }] }],
         product: { isActive: true },
       },
       orderBy: { product: { name: "asc" } },
